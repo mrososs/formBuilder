@@ -1,1 +1,80 @@
 /* You can add global styles to this file, and also import other style files */
+
+@use "./themes/_tailwind.css";
+
+/* Angular Material Global Styles */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  background-color: #fafafa;
+}
+
+/* Material Design Typography */
+.mat-typography {
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+}
+
+/* Custom Material Theme Overrides */
+.mat-mdc-card {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.mat-mdc-button {
+  border-radius: 4px;
+}
+
+.mat-mdc-raised-button {
+  border-radius: 4px;
+}
+
+/* Form Builder Specific Styles */
+.form-builder-container {
+  padding: 20px;
+  background-color: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Drag and Drop Styles */
+.cdk-drop-list-dragging {
+  border: 2px dashed #3f51b5 !important;
+  background-color: rgba(63, 81, 181, 0.05) !important;
+  transition: all 0.3s ease;
+}
+
+/* Specific styling for elements menu (prevent dragging styles) */
+.elements-menu.cdk-drop-list-dragging,
+.cdk-drop-list-dragging.elements-menu {
+  border: none !important;
+  background-color: transparent !important;
+}
+
+/* Drop zone styling */
+.cdk-drop-list-receiving {
+  border: 2px dashed #4caf50 !important;
+  background-color: rgba(76, 175, 80, 0.05) !important;
+}
+
+/* Dragged item styling */
+.cdk-drag-preview {
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3) !important;
+  border-radius: 4px;
+  background: white;
+}
+
+.cdk-drag-placeholder {
+  opacity: 0.3;
+  background: #ccc;
+  border: 2px dashed #999;
+  border-radius: 4px;
+}
+
+.cdk-drag-animating {
+  transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
