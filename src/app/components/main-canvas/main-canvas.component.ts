@@ -1,10 +1,12 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, input } from '@angular/core';
 import { FormEditorComponent } from './form-editor/form-editor.component';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { FormPreviewComponent } from './form-preview/form-preview.component';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { FormService } from '../../services/form.service';
+import { FormExportComponent } from '../form-export/form-export.component';
 
 @Component({
   selector: 'app-main-canvas',
@@ -14,6 +16,7 @@ import { FormService } from '../../services/form.service';
     FormPreviewComponent,
     MatButtonModule,
     MatIconModule,
+    MatDialogModule,
   ],
   template: `
     <div class="main-canvas-container">
@@ -49,6 +52,17 @@ import { FormService } from '../../services/form.service';
             <mat-icon>add_circle</mat-icon>
             Add Row
           </button>
+          @if(showExportButton()){
+          <button
+            mat-raised-button
+            color="accent"
+            (click)="openExportDialog()"
+            class="export-btn"
+          >
+            <mat-icon>download</mat-icon>
+            Export Form
+          </button>
+          }
         </div>
         }
       </div>
@@ -147,6 +161,18 @@ import { FormService } from '../../services/form.service';
       transform: translateY(-1px);
     }
 
+    .export-btn {
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      transition: all 0.2s ease;
+    }
+
+    .export-btn:hover {
+      background: rgba(255, 255, 255, 0.3);
+      transform: translateY(-1px);
+    }
+
     .canvas-content {
       flex: 1;
       overflow: hidden;
@@ -180,4 +206,23 @@ import { FormService } from '../../services/form.service';
 export class MainCanvasComponent {
   activeTab = signal<'preview' | 'editor'>('editor');
   formService = inject(FormService);
+  private dialog = inject(MatDialog);
+
+  // Input to control export button visibility - defaults to true for backward compatibility
+  showExportButton = input<boolean>(true);
+
+  openExportDialog(): void {
+    const fields = this.formService.getFormFields();
+    if (fields.length === 0) {
+      alert('Please add some fields to the form before exporting.');
+      return;
+    }
+
+    const dialogRef = this.dialog.open(FormExportComponent, {
+      width: '800px',
+      maxWidth: '90vw',
+      maxHeight: '80vh',
+      data: { fields },
+    });
+  }
 }

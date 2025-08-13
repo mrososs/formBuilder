@@ -25,7 +25,7 @@ import { DragDropModule } from '@angular/cdk/drag-drop';
         <div class="modal-body">
           <div class="form-builder-container" cdkDropListGroup>
             <app-form-elements-menu class="sidebar-left" />
-            <app-main-canvas class="main-content" />
+            <app-main-canvas class="main-content" [showExportButton]="false" />
             <app-field-settings class="sidebar-right" />
           </div>
         </div>

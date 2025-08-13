@@ -20,8 +20,63 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
   imports: [CommonModule, FormsModule, FormBuilderModalComponent],
   template: `
     <div class="workflow-designer-container">
-      <!-- Enhanced Header with Search and Templates -->
-      <div class="workflow-header">
+      <!-- Mobile Header -->
+      <div class="lg:hidden bg-white border-b border-gray-200 p-4">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900">
+              Workflow Designer
+            </h2>
+            <p class="text-sm text-gray-600">
+              Design and manage your workflows
+            </p>
+          </div>
+          <button
+            class="lg:hidden p-2 rounded-md bg-blue-600 text-white"
+            (click)="toggleMobileSidebar()"
+          >
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"
+              ></path>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Mobile Search -->
+        <div class="relative">
+          <input
+            type="text"
+            placeholder="Search activities..."
+            [(ngModel)]="searchTerm"
+            class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <svg
+            class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            ></path>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Desktop Header -->
+      <div class="hidden lg:block workflow-header">
         <div class="header-left">
           <h2 class="workflow-title">Workflow Designer</h2>
           <p class="workflow-subtitle">Design and manage your workflows</p>
@@ -337,7 +392,185 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
       </div>
 
       <div class="workflow-content">
-        <div class="workflow-sidebar">
+        <!-- Mobile Sidebar Overlay -->
+        <div
+          *ngIf="showMobileSidebar"
+          class="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-40"
+          (click)="toggleMobileSidebar()"
+        ></div>
+
+        <!-- Mobile Sidebar -->
+        <div
+          *ngIf="showMobileSidebar"
+          class="lg:hidden fixed left-0 top-0 h-full w-80 bg-white shadow-lg z-50 transform transition-transform duration-300"
+        >
+          <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900">Activities</h3>
+              <button
+                class="p-1 rounded-md hover:bg-gray-100"
+                (click)="toggleMobileSidebar()"
+              >
+                <svg
+                  class="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="overflow-y-auto h-full">
+            <div class="p-4">
+              <div class="activity-list">
+                <div
+                  *ngFor="let activity of filteredActivities"
+                  class="activity-item"
+                  draggable="true"
+                  (dragstart)="onDragStart($event, activity)"
+                  (dragend)="onDragEnd($event)"
+                  (click)="addActivity(activity); toggleMobileSidebar()"
+                >
+                  <div class="activity-icon" [class]="activity.icon">
+                    <svg
+                      *ngIf="activity.icon === 'form'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'email'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'condition'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'delay'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'approval'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'notification'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M15 17h5l-5 5v-5zM4.83 2.83l4.24 4.24M14.83 2.83l-4.24 4.24M20.12 12.29l-4.24-4.24M3.88 12.29l4.24-4.24M14.83 21.17l-4.24-4.24M4.83 21.17l4.24-4.24"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'webhook'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M13 10V3L4 14h7v7l9-11h-7z"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'database'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"
+                      ></path>
+                    </svg>
+                    <svg
+                      *ngIf="activity.icon === 'finish'"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M5 13l4 4L19 7"
+                      ></path>
+                    </svg>
+                  </div>
+                  <div class="activity-info">
+                    <div class="activity-name">{{ activity.name }}</div>
+                    <div class="activity-description">
+                      {{ activity.description }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desktop Sidebar -->
+        <div class="hidden lg:block workflow-sidebar">
           <div class="sidebar-section">
             <h3 class="section-title">Workflow Activities</h3>
             <div class="activity-list">
@@ -480,7 +713,98 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         </div>
 
         <div class="workflow-canvas" #workflowCanvas>
-          <div class="canvas-header">
+          <!-- Mobile Canvas Header -->
+          <div class="lg:hidden bg-white border-b border-gray-200 p-3">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900">Canvas</h3>
+              <div class="flex space-x-2">
+                <button
+                  class="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  (click)="zoomIn()"
+                  title="Zoom In"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                    ></path>
+                  </svg>
+                </button>
+                <button
+                  class="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  (click)="zoomOut()"
+                  title="Zoom Out"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M18 12H6"
+                    ></path>
+                  </svg>
+                </button>
+                <button
+                  class="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  (click)="resetZoom()"
+                  title="Reset Zoom"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"
+                    ></path>
+                  </svg>
+                </button>
+                <button
+                  class="p-2 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700"
+                  (click)="centerCanvas()"
+                  title="Center Canvas"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                    ></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <div class="mt-2 text-sm text-gray-600">
+              Zoom: {{ Math.round(zoomLevel * 100) }}% | Nodes:
+              {{ workflowNodes.length }} | Connections:
+              {{ workflowConnections.length }}
+            </div>
+          </div>
+
+          <!-- Desktop Canvas Header -->
+          <div class="hidden lg:block canvas-header">
             <h3>Workflow Canvas</h3>
             <div class="canvas-controls">
               <button
@@ -525,6 +849,8 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
             (mouseup)="cancelConnection(); endNodeDrag(); endPanning()"
             (mousedown)="startPanning($event)"
             (wheel)="onWheel($event)"
+            (touchstart)="onTouchStart($event)"
+            (touchmove)="onTouchMove($event)"
           >
             <div
               *ngFor="let node of workflowNodes"
@@ -811,7 +1137,60 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
           <!-- Mini-map -->
         </div>
 
-        <div class="workflow-properties" *ngIf="selectedNode">
+        <!-- Mobile Properties Panel -->
+        <div
+          *ngIf="selectedNode"
+          class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-30 max-h-96 overflow-y-auto"
+        >
+          <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center justify-between">
+              <h3 class="text-lg font-semibold text-gray-900">Properties</h3>
+              <button
+                class="p-1 rounded-md hover:bg-gray-100"
+                (click)="selectedNode = null"
+              >
+                <svg
+                  class="w-6 h-6"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"
+                  ></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          <div class="p-4">
+            <div class="property-group">
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Title</label
+              >
+              <input
+                type="text"
+                [(ngModel)]="selectedNode.title"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div class="property-group mt-4">
+              <label class="block text-sm font-medium text-gray-700 mb-1"
+                >Description</label
+              >
+              <textarea
+                [(ngModel)]="selectedNode.description"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                rows="3"
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Desktop Properties Panel -->
+        <div class="hidden lg:block workflow-properties" *ngIf="selectedNode">
           <div class="properties-header">
             <h3>Properties</h3>
             <button class="btn btn-sm" (click)="selectedNode = null">×</button>
@@ -1118,8 +1497,29 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
       .workflow-designer-container {
         display: flex;
         flex-direction: column;
-        height: 100%;
+        height: 100vh;
         background: #f8fafc;
+        overflow: hidden;
+      }
+
+      /* Mobile responsive adjustments */
+      @media (max-width: 1024px) {
+        .workflow-designer-container {
+          height: 100vh;
+        }
+
+        .workflow-content {
+          flex: 1;
+          overflow: auto;
+          display: flex;
+        }
+
+        .canvas-content {
+          min-width: auto;
+          min-height: auto;
+          width: 100%;
+          height: 100%;
+        }
       }
 
       .workflow-header {
@@ -1129,6 +1529,7 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         padding: 20px 24px;
         background: white;
         border-bottom: 1px solid #e2e8f0;
+        flex-shrink: 0;
       }
 
       .header-left h2 {
@@ -1307,7 +1708,20 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
       .workflow-content {
         display: flex;
         flex: 1;
-        overflow: hidden;
+        overflow: auto;
+        position: relative;
+      }
+
+      /* Mobile layout adjustments */
+      @media (max-width: 1024px) {
+        .workflow-content {
+          flex-direction: column;
+        }
+
+        .workflow-canvas {
+          flex: 1;
+          min-height: 0;
+        }
       }
 
       .workflow-sidebar {
@@ -1343,6 +1757,32 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s;
+      }
+
+      /* Mobile activity item adjustments */
+      @media (max-width: 1024px) {
+        .activity-item {
+          padding: 10px;
+          gap: 10px;
+        }
+
+        .activity-icon {
+          width: 28px;
+          height: 28px;
+        }
+
+        .activity-icon svg {
+          width: 16px;
+          height: 16px;
+        }
+
+        .activity-name {
+          font-size: 0.875rem;
+        }
+
+        .activity-description {
+          font-size: 0.75rem;
+        }
       }
 
       .activity-item:hover {
@@ -1387,7 +1827,7 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         display: flex;
         flex-direction: column;
         background: #f8fafc;
-        overflow: hidden;
+        overflow: auto;
       }
 
       .canvas-header {
@@ -1416,8 +1856,8 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         position: relative;
         overflow: auto;
         padding: 20px;
-        min-width: 1000px;
-        min-height: 800px;
+        min-width: 1200px;
+        min-height: 1000px;
         background: linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
         background-size: 20px 20px;
@@ -1437,6 +1877,30 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         image-rendering: -webkit-optimize-contrast;
         image-rendering: crisp-edges;
         transform-origin: center center;
+      }
+
+      /* Mobile node adjustments */
+      @media (max-width: 1024px) {
+        .workflow-node {
+          width: 160px;
+          font-size: 0.875rem;
+        }
+
+        .workflow-node .node-header {
+          padding: 8px;
+        }
+
+        .workflow-node .node-content {
+          padding: 8px;
+        }
+
+        .workflow-node .node-title {
+          font-size: 0.875rem;
+        }
+
+        .workflow-node .node-description {
+          font-size: 0.75rem;
+        }
       }
 
       .workflow-node:hover {
@@ -2317,6 +2781,7 @@ export class WorkflowDesignerPageComponent implements OnInit {
   searchTerm = '';
   showTemplates = false;
   showMiniMap = true;
+  showMobileSidebar = false;
   validationErrors: any[] = [];
   canUndo = false;
   canRedo = false;
@@ -2324,6 +2789,7 @@ export class WorkflowDesignerPageComponent implements OnInit {
   canvasOffset = { x: 0, y: 0 };
   canvasWidth = 1000;
   canvasHeight = 800;
+  initialPinchDistance: number | null = null;
   Math = Math; // Make Math available in template
 
   // Workflow metadata
@@ -3391,6 +3857,56 @@ export class WorkflowDesignerPageComponent implements OnInit {
       this.applyZoom();
       this.centerCanvas();
     }, 100);
+  }
+
+  toggleMobileSidebar() {
+    this.showMobileSidebar = !this.showMobileSidebar;
+  }
+
+  // Mobile touch gesture handling
+  onTouchStart(event: TouchEvent) {
+    if (event.touches.length === 2) {
+      // Two finger touch - handle pinch zoom
+      event.preventDefault();
+      this.handlePinchStart(event);
+    }
+  }
+
+  onTouchMove(event: TouchEvent) {
+    if (event.touches.length === 2) {
+      // Two finger touch - handle pinch zoom
+      event.preventDefault();
+      this.handlePinchMove(event);
+    }
+  }
+
+  private handlePinchStart(event: TouchEvent) {
+    const touch1 = event.touches[0];
+    const touch2 = event.touches[1];
+    const distance = Math.hypot(
+      touch2.clientX - touch1.clientX,
+      touch2.clientY - touch1.clientY
+    );
+    this.initialPinchDistance = distance;
+  }
+
+  private handlePinchMove(event: TouchEvent) {
+    if (!this.initialPinchDistance) return;
+
+    const touch1 = event.touches[0];
+    const touch2 = event.touches[1];
+    const distance = Math.hypot(
+      touch2.clientX - touch1.clientX,
+      touch2.clientY - touch1.clientY
+    );
+    const scale = distance / this.initialPinchDistance;
+
+    // Apply zoom based on pinch scale
+    const newZoomLevel = Math.max(0.5, Math.min(3, this.zoomLevel * scale));
+    if (Math.abs(newZoomLevel - this.zoomLevel) > 0.1) {
+      this.zoomLevel = newZoomLevel;
+      this.applyZoom();
+    }
   }
 
   endPanning() {

@@ -117,4 +117,8 @@ export class FormService {
     }));
     this._rows.set(newRows);
   }
+
+  getFormFields(): FormField[] {
+    return this._rows().flatMap((row) => row.fields);
+  }
 }
