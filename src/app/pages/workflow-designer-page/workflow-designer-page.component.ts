@@ -809,7 +809,6 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
           </div>
 
           <!-- Mini-map -->
-         
         </div>
 
         <div class="workflow-properties" *ngIf="selectedNode">
@@ -1388,6 +1387,7 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         display: flex;
         flex-direction: column;
         background: #f8fafc;
+        overflow: hidden;
       }
 
       .canvas-header {
@@ -1416,6 +1416,12 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         position: relative;
         overflow: auto;
         padding: 20px;
+        min-width: 1000px;
+        min-height: 800px;
+        background: linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
+        background-size: 20px 20px;
+        transition: transform 0.2s ease-out;
       }
 
       .workflow-node {
@@ -1427,6 +1433,10 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         cursor: move;
         transition: all 0.2s;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        /* Improve rendering quality during zoom */
+        image-rendering: -webkit-optimize-contrast;
+        image-rendering: crisp-edges;
+        transform-origin: center center;
       }
 
       .workflow-node:hover {
@@ -1631,6 +1641,9 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
       .connection-line {
         cursor: pointer;
         transition: stroke-width 0.2s;
+        /* Improve rendering quality during zoom */
+        shape-rendering: geometricPrecision;
+        text-rendering: optimizeLegibility;
       }
 
       .connection-line:hover {
@@ -2746,13 +2759,18 @@ export class WorkflowDesignerPageComponent implements OnInit {
   }
 
   constructor(private workflowService: WorkflowService) {
-    this.addStartNode();
-    this.saveToHistory();
+    // Don't add start node here - wait for ngOnInit
   }
 
   ngOnInit() {
     this.addStartNode();
     this.saveToHistory();
+
+    // Initialize zoom after view is ready
+    setTimeout(() => {
+      this.applyZoom();
+      this.centerCanvas();
+    }, 100);
   }
 
   // Keyboard shortcuts
@@ -2818,6 +2836,14 @@ export class WorkflowDesignerPageComponent implements OnInit {
   }
 
   addStartNode() {
+    // Check if start node already exists
+    const existingStartNode = this.workflowNodes.find(
+      (node) => node.type === 'start'
+    );
+    if (existingStartNode) {
+      return; // Don't add another start node
+    }
+
     const startNode = {
       id: 'start',
       title: 'Start',
@@ -2956,7 +2982,7 @@ export class WorkflowDesignerPageComponent implements OnInit {
   }
 
   zoomOut() {
-    this.zoomLevel = Math.max(this.zoomLevel / 1.2, 0.3);
+    this.zoomLevel = Math.max(this.zoomLevel / 1.2, 0.5);
     this.applyZoom();
   }
 
@@ -2967,7 +2993,37 @@ export class WorkflowDesignerPageComponent implements OnInit {
 
   private applyZoom() {
     const canvas = this.workflowCanvas.nativeElement;
-    canvas.style.transform = `scale(${this.zoomLevel})`;
+    const canvasContent = canvas.querySelector('.canvas-content');
+
+    if (canvasContent) {
+      // Apply zoom to the canvas content instead of the entire canvas
+      canvasContent.style.transform = `scale(${this.zoomLevel})`;
+      canvasContent.style.transformOrigin = 'top left';
+
+      // Adjust canvas size to accommodate zoom
+      const originalWidth = 1000; // Base canvas width
+      const originalHeight = 800; // Base canvas height
+
+      canvasContent.style.width = `${originalWidth * this.zoomLevel}px`;
+      canvasContent.style.height = `${originalHeight * this.zoomLevel}px`;
+
+      // Update canvas offset for panning
+      this.updateCanvasOffset();
+    }
+  }
+
+  private updateCanvasOffset() {
+    // Update the canvas offset display
+    const canvas = this.workflowCanvas.nativeElement;
+    const canvasContent = canvas.querySelector('.canvas-content');
+
+    if (canvasContent) {
+      const rect = canvasContent.getBoundingClientRect();
+      this.canvasOffset = {
+        x: rect.left,
+        y: rect.top,
+      };
+    }
   }
 
   // Connection drawing methods
@@ -3327,6 +3383,16 @@ export class WorkflowDesignerPageComponent implements OnInit {
     }
   }
 
+  // Handle canvas resize
+  @HostListener('window:resize')
+  onResize() {
+    // Reapply zoom and center after window resize
+    setTimeout(() => {
+      this.applyZoom();
+      this.centerCanvas();
+    }, 100);
+  }
+
   endPanning() {
     this.isPanning = false;
   }
@@ -3334,26 +3400,70 @@ export class WorkflowDesignerPageComponent implements OnInit {
   onWheel(event: WheelEvent) {
     if (event.ctrlKey) {
       event.preventDefault();
+
+      // Get mouse position relative to canvas
+      const canvas = this.workflowCanvas.nativeElement;
+      const canvasContent = canvas.querySelector('.canvas-content');
+      const rect = canvasContent.getBoundingClientRect();
+      const mouseX = event.clientX - rect.left;
+      const mouseY = event.clientY - rect.top;
+
+      // Calculate zoom center
+      const zoomCenterX = mouseX / this.zoomLevel;
+      const zoomCenterY = mouseY / this.zoomLevel;
+
+      // Apply zoom
       if (event.deltaY < 0) {
         this.zoomIn();
       } else {
         this.zoomOut();
       }
+
+      // Adjust canvas position to zoom towards mouse
+      if (canvasContent) {
+        const newRect = canvasContent.getBoundingClientRect();
+        const newMouseX = event.clientX - newRect.left;
+        const newMouseY = event.clientY - newRect.top;
+
+        const deltaX = (mouseX - newMouseX) / this.zoomLevel;
+        const deltaY = (mouseY - newMouseY) / this.zoomLevel;
+
+        canvasContent.scrollLeft += deltaX;
+        canvasContent.scrollTop += deltaY;
+      }
     } else {
-      // Pan with mouse wheel
-      this.canvasOffset.x -= event.deltaX;
-      this.canvasOffset.y -= event.deltaY;
+      // Pan with mouse wheel (horizontal scroll)
+      const canvas = this.workflowCanvas.nativeElement;
+      const canvasContent = canvas.querySelector('.canvas-content');
+      if (canvasContent) {
+        canvasContent.scrollLeft += event.deltaX;
+        canvasContent.scrollTop += event.deltaY;
+      }
     }
   }
 
   centerCanvas() {
     if (this.workflowNodes.length > 0) {
       const bounds = this.getWorkflowBounds();
-      const canvasRect =
-        this.workflowCanvas.nativeElement.getBoundingClientRect();
+      const canvas = this.workflowCanvas.nativeElement;
+      const canvasContent = canvas.querySelector('.canvas-content');
+      const canvasRect = canvas.getBoundingClientRect();
 
-      this.canvasOffset.x = (canvasRect.width - bounds.width) / 2 - bounds.x;
-      this.canvasOffset.y = (canvasRect.height - bounds.height) / 2 - bounds.y;
+      if (canvasContent) {
+        // Calculate center position
+        const centerX =
+          (canvasRect.width - bounds.width * this.zoomLevel) / 2 -
+          bounds.x * this.zoomLevel;
+        const centerY =
+          (canvasRect.height - bounds.height * this.zoomLevel) / 2 -
+          bounds.y * this.zoomLevel;
+
+        // Apply centering
+        canvasContent.scrollLeft = Math.max(0, -centerX);
+        canvasContent.scrollTop = Math.max(0, -centerY);
+
+        this.updateCanvasOffset();
+      }
     }
   }
 
