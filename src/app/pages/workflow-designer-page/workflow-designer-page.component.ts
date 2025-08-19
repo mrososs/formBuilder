@@ -23,6 +23,10 @@ import {
 } from '../../components/transition-dialog/transition-dialog.component';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
+import {
+  WorkflowSimulationDialogComponent,
+  SimulationResult,
+} from '../../components/workflow-simulation-dialog/workflow-simulation-dialog.component';
 
 @Component({
   selector: 'app-workflow-designer-page',
@@ -32,6 +36,7 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
     FormBuilderModalComponent,
     TransitionDialogComponent,
     MatDialogModule,
+    WorkflowSimulationDialogComponent,
   ],
   template: `
     <div class="workflow-designer-container">
@@ -289,6 +294,27 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
                 ></path>
               </svg>
               Validate
+            </button>
+            <button
+              class="btn btn-outline"
+              (click)="startSimulation()"
+              title="Simulate Workflow (Ctrl+R)"
+              [disabled]="workflowNodes.length <= 2"
+            >
+              <svg
+                class="btn-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                ></path>
+              </svg>
+              Simulate
             </button>
             <button
               class="btn btn-primary"
@@ -1142,8 +1168,10 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
                   <button
                     *ngIf="node.type !== 'finish'"
                     class="btn btn-sm btn-outline"
+                    [class.btn-disabled]="!getConnectionStatus(node).canConnect"
+                    [disabled]="!getConnectionStatus(node).canConnect"
                     (mousedown)="startConnection(node, $event)"
-                    title="Start connection from this node"
+                    [title]="getConnectionStatus(node).message"
                   >
                     <svg
                       width="12"
@@ -1160,6 +1188,36 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
                       ></path>
                     </svg>
                   </button>
+                </div>
+              </div>
+
+              <!-- Connection Status Indicator -->
+              <div class="connection-status" *ngIf="node.type !== 'finish'">
+                <div
+                  class="status-indicator"
+                  [class]="
+                    getConnectionStatus(node).canConnect
+                      ? 'can-connect'
+                      : 'cannot-connect'
+                  "
+                >
+                  <svg
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    width="12"
+                    height="12"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M13 10V3L4 14h7v7l9-11h-7z"
+                    ></path>
+                  </svg>
+                  <span class="status-text">{{
+                    getConnectionStatus(node).message
+                  }}</span>
                 </div>
               </div>
             </div>
@@ -1703,6 +1761,15 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
         [connection]="selectedConnection"
         (saveTransition)="onTransitionSaved($event)"
         (closeDialog)="closeTransitionDialog()"
+      />
+
+      <!-- Workflow Simulation Dialog -->
+      <app-workflow-simulation-dialog
+        *ngIf="showSimulationDialog"
+        [workflowNodes]="workflowNodes"
+        [workflowConnections]="workflowConnections"
+        (simulationComplete)="onSimulationComplete($event)"
+        (simulationClosed)="closeSimulationDialog()"
       />
     </div>
   `,
@@ -3286,6 +3353,61 @@ import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-
       .connection-delete-btn:hover .delete-btn-icon {
         stroke-width: 2.5;
       }
+
+      /* Connection Status Styles */
+      .connection-status {
+        margin-top: 8px;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+      }
+
+      .status-indicator {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 2px 6px;
+        border-radius: 3px;
+        transition: all 0.2s;
+      }
+
+      .status-indicator.can-connect {
+        background: rgba(16, 185, 129, 0.1);
+        color: #059669;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+      }
+
+      .status-indicator.cannot-connect {
+        background: rgba(239, 68, 68, 0.1);
+        color: #dc2626;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+      }
+
+      .status-indicator svg {
+        width: 10px;
+        height: 10px;
+      }
+
+      .status-text {
+        font-size: 0.7rem;
+        line-height: 1.2;
+      }
+
+      .btn-disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        background: #f3f4f6;
+        color: #9ca3af;
+        border-color: #d1d5db;
+      }
+
+      .btn-disabled:hover {
+        background: #f3f4f6;
+        color: #9ca3af;
+        border-color: #d1d5db;
+        transform: none;
+      }
     `,
   ],
 })
@@ -3303,6 +3425,9 @@ export class WorkflowDesignerPageComponent
   selectedConnection: any = null;
   selectedConnectionFromNode: any = null;
   selectedConnectionToNode: any = null;
+
+  // Simulation dialog properties
+  showSimulationDialog = false;
 
   // Get category-specific activities
   getAvailableActivities(): any[] {
@@ -4544,6 +4669,10 @@ export class WorkflowDesignerPageComponent
           event.preventDefault();
           this.validateWorkflow();
           break;
+        case 'r':
+          event.preventDefault();
+          this.startSimulation();
+          break;
         case '=':
         case '+':
           event.preventDefault();
@@ -4934,6 +5063,15 @@ export class WorkflowDesignerPageComponent
     if (node?.type === 'finish') {
       return;
     }
+
+    // Check if node can have more connections
+    if (!this.canNodeHaveMoreConnections(node)) {
+      alert(
+        `This ${node.type} node can only have one outgoing connection. Please delete the existing connection first.`
+      );
+      return;
+    }
+
     event.stopPropagation();
     this.isDrawingConnection = true;
     this.connectionStartNode = node;
@@ -4965,12 +5103,21 @@ export class WorkflowDesignerPageComponent
         return;
       }
 
+      // Check if we can create this connection
+      if (!this.canNodeHaveMoreConnections(this.connectionStartNode)) {
+        alert(
+          `This ${this.connectionStartNode.type} node can only have one outgoing connection.`
+        );
+        this.cancelConnection();
+        return;
+      }
+
       // Create connection
       const connection = {
         id: `conn_${Date.now()}`,
         from: this.connectionStartNode.id,
         to: targetNode.id,
-        label: '→',
+        label: this.getDefaultConnectionLabel(this.connectionStartNode),
         fromPoint: { ...this.connectionStartPoint },
         toPoint: {
           x: targetNode.x,
@@ -5004,6 +5151,79 @@ export class WorkflowDesignerPageComponent
       this.workflowConnections.splice(index, 1);
     }
     this.saveToHistory();
+  }
+
+  // Connection validation methods
+  canNodeHaveMoreConnections(node: any): boolean {
+    const outgoingConnections = this.workflowConnections.filter(
+      (conn) => conn.from === node.id
+    );
+
+    // Condition nodes can have multiple connections (Yes/No paths)
+    if (node.type === 'condition') {
+      return true; // Allow multiple connections for conditions
+    }
+
+    // All other nodes can only have one outgoing connection
+    return outgoingConnections.length === 0;
+  }
+
+  getNodeConnectionLimit(node: any): number {
+    return node.type === 'condition' ? 2 : 1; // Condition can have Yes/No, others only 1
+  }
+
+  getDefaultConnectionLabel(node: any): string {
+    if (node.type === 'condition') {
+      // For condition nodes, check existing connections to determine if this is Yes or No
+      const existingConnections = this.workflowConnections.filter(
+        (conn) => conn.from === node.id
+      );
+
+      if (existingConnections.length === 0) {
+        return 'Yes'; // First connection is typically Yes
+      } else if (existingConnections.length === 1) {
+        return 'No'; // Second connection is typically No
+      }
+    }
+
+    return '→'; // Default label for other nodes
+  }
+
+  getConnectionStatus(node: any): { canConnect: boolean; message: string } {
+    const outgoingConnections = this.workflowConnections.filter(
+      (conn) => conn.from === node.id
+    );
+
+    if (node.type === 'condition') {
+      if (outgoingConnections.length >= 2) {
+        return {
+          canConnect: false,
+          message: 'Condition node has maximum connections (Yes/No)',
+        };
+      } else if (outgoingConnections.length === 1) {
+        return {
+          canConnect: true,
+          message: 'Condition node can have one more connection (No path)',
+        };
+      } else {
+        return {
+          canConnect: true,
+          message: 'Condition node can have connections (Yes/No paths)',
+        };
+      }
+    } else {
+      if (outgoingConnections.length >= 1) {
+        return {
+          canConnect: false,
+          message: `${node.type} node can only have one connection`,
+        };
+      } else {
+        return {
+          canConnect: true,
+          message: `${node.type} node can have one connection`,
+        };
+      }
+    }
   }
 
   // Enhanced condition logic
@@ -5757,5 +5977,36 @@ export class WorkflowDesignerPageComponent
   getTransitionsCount(): number {
     return this.workflowConnections.filter((conn) => conn.transitionConfig)
       .length;
+  }
+
+  // Simulation methods
+  startSimulation() {
+    if (this.workflowNodes.length <= 2) {
+      alert('Please add at least one workflow step before simulating.');
+      return;
+    }
+    this.showSimulationDialog = true;
+  }
+
+  onSimulationComplete(result: SimulationResult) {
+    console.log('Simulation completed:', result);
+
+    // Show simulation results
+    const message = `
+      Simulation completed successfully!
+      
+      Total Steps: ${result.totalSteps}
+      Completed Steps: ${result.completedSteps}
+      Duration: ${Math.round(result.duration / 1000)} seconds
+      
+      All steps have been processed successfully.
+    `;
+
+    alert(message);
+    this.closeSimulationDialog();
+  }
+
+  closeSimulationDialog() {
+    this.showSimulationDialog = false;
   }
 }
