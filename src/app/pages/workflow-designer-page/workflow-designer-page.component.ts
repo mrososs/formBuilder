@@ -1,9 +1,12 @@
 import {
   Component,
   OnInit,
+  AfterViewInit,
+  OnDestroy,
   ElementRef,
   ViewChild,
   HostListener,
+  inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -14,10 +17,22 @@ import {
   WorkflowConnection,
 } from '../../services/workflow.service';
 import { FormBuilderModalComponent } from '../../components/form-builder-modal/form-builder-modal.component';
+import {
+  TransitionDialogComponent,
+  TransitionConfig,
+} from '../../components/transition-dialog/transition-dialog.component';
+import { MatDialogModule, MatDialog } from '@angular/material/dialog';
+import { ConfirmDialogComponent } from '../../components/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-workflow-designer-page',
-  imports: [CommonModule, FormsModule, FormBuilderModalComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    FormBuilderModalComponent,
+    TransitionDialogComponent,
+    MatDialogModule,
+  ],
   template: `
     <div class="workflow-designer-container">
       <!-- Mobile Header -->
@@ -95,12 +110,20 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
               </div>
               <div class="metadata-field">
                 <label>Category:</label>
-                <select [(ngModel)]="workflowCategory" class="metadata-select">
+                <select
+                  [(ngModel)]="workflowCategory"
+                  (ngModelChange)="onCategoryChange($event)"
+                  class="metadata-select"
+                >
                   <option
                     *ngFor="let category of workflowCategories"
                     [value]="category"
                   >
-                    {{ category }}
+                    {{
+                      category === 'all'
+                        ? 'All Categories'
+                        : category.toUpperCase()
+                    }}
                   </option>
                 </select>
               </div>
@@ -311,14 +334,70 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         </div>
       </div>
 
-      <!-- Templates Dropdown -->
-      <div class="templates-dropdown" *ngIf="showTemplates">
-        <div class="templates-header">
-          <h4>Workflow Templates</h4>
-          <div class="template-controls">
+      <!-- Templates Modal -->
+      <div
+        class="templates-modal-overlay"
+        *ngIf="showTemplates"
+        (click)="showTemplates = false"
+      >
+        <div class="templates-modal" (click)="$event.stopPropagation()">
+          <div class="templates-modal-header">
+            <h3 class="templates-modal-title">
+              <svg
+                class="templates-modal-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                ></path>
+              </svg>
+              Workflow Templates
+            </h3>
+            <button
+              class="templates-modal-close"
+              (click)="showTemplates = false"
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"
+                ></path>
+              </svg>
+            </button>
+          </div>
+
+          <div class="templates-modal-controls">
+            <div class="template-search">
+              <input
+                type="text"
+                placeholder="Search templates..."
+                [(ngModel)]="templateSearchTerm"
+                class="template-search-input"
+              />
+              <svg
+                class="template-search-icon"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                ></path>
+              </svg>
+            </div>
             <select
               [(ngModel)]="selectedTemplateCategory"
-              class="template-filter"
+              class="template-category-filter"
             >
               <option value="">All Categories</option>
               <option
@@ -328,31 +407,74 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
                 {{ category }}
               </option>
             </select>
-            <button class="btn btn-sm" (click)="showTemplates = false">
-              ×
-            </button>
           </div>
-        </div>
-        <div class="templates-list">
-          <div
-            *ngFor="let template of filteredTemplates"
-            class="template-item"
-            (click)="loadTemplate(template)"
-          >
-            <div class="template-icon">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                  stroke-width="2"
-                  d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
-                ></path>
-              </svg>
-            </div>
-            <div class="template-info">
-              <div class="template-name">{{ template.name }}</div>
-              <div class="template-category">{{ template.category }}</div>
-              <div class="template-description">{{ template.description }}</div>
+
+          <div class="templates-modal-content">
+            <div class="templates-grid">
+              <div
+                *ngFor="let template of filteredTemplates"
+                class="template-card"
+                (click)="loadTemplate(template)"
+              >
+                <div class="template-card-header">
+                  <div class="template-card-icon">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"
+                      ></path>
+                    </svg>
+                  </div>
+                  <div class="template-card-category">
+                    {{ template.category }}
+                  </div>
+                </div>
+                <div class="template-card-body">
+                  <h4 class="template-card-name">{{ template.name }}</h4>
+                  <p class="template-card-description">
+                    {{ template.description }}
+                  </p>
+                  <div class="template-card-stats">
+                    <span class="template-stat">
+                      <svg
+                        class="template-stat-icon"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                        ></path>
+                      </svg>
+                      {{ template.nodes.length }} nodes
+                    </span>
+                    <span class="template-stat">
+                      <svg
+                        class="template-stat-icon"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-width="2"
+                          d="M13 7l5 5m0 0l-5 5m5-5H6"
+                        ></path>
+                      </svg>
+                      {{ template.connections.length }} connections
+                    </span>
+                  </div>
+                </div>
+                <div class="template-card-footer">
+                  <button class="template-use-btn">Use Template</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -368,6 +490,10 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
           <span class="status-item">
             <span class="status-label">Connections:</span>
             <span class="status-value">{{ workflowConnections.length }}</span>
+          </span>
+          <span class="status-item" *ngIf="getTransitionsCount() > 0">
+            <span class="status-label">Transitions:</span>
+            <span class="status-value">{{ getTransitionsCount() }}</span>
           </span>
           <span class="status-item" *ngIf="validationErrors.length > 0">
             <span class="status-label">Errors:</span>
@@ -987,7 +1113,12 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
                   </svg>
                 </div>
                 <div class="node-title">{{ node.title }}</div>
-                <button class="node-delete" (click)="deleteNode(node, $event)">
+                <button
+                  *ngIf="!node.isDefault"
+                  class="node-delete"
+                  (click)="deleteNode(node, $event)"
+                  title="Delete Node"
+                >
                   ×
                 </button>
               </div>
@@ -1009,6 +1140,7 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
                     Configure Condition
                   </button>
                   <button
+                    *ngIf="node.type !== 'finish'"
                     class="btn btn-sm btn-outline"
                     (mousedown)="startConnection(node, $event)"
                     title="Start connection from this node"
@@ -1072,20 +1204,41 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
                     <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
+                <filter id="glow-hover">
+                  <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
               </defs>
 
               <!-- Existing connections -->
-              <g *ngFor="let connection of workflowConnections">
+              <g
+                *ngFor="let connection of workflowConnections"
+                class="connection-group"
+              >
                 <!-- Connection path with curve -->
                 <path
                   [attr.d]="getConnectionPath(connection)"
-                  stroke="#3b82f6"
+                  [attr.stroke]="
+                    connection.transitionConfig ? '#10b981' : '#3b82f6'
+                  "
                   stroke-width="3"
                   fill="none"
                   marker-end="url(#arrowhead)"
-                  class="connection-line"
+                  [class]="
+                    'connection-line' +
+                    (connection.transitionConfig ? ' has-transition' : '')
+                  "
                   filter="url(#glow)"
-                  (click)="deleteConnection(connection, $event)"
+                  (click)="openTransitionDialog(connection)"
+                  (contextmenu)="showConnectionContextMenu($event, connection)"
+                  [title]="
+                    connection.transitionConfig
+                      ? 'Edit Transition Configuration'
+                      : 'Configure Transition'
+                  "
                 />
 
                 <!-- Connection label -->
@@ -1095,9 +1248,60 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
                   class="connection-label"
                   text-anchor="middle"
                   dominant-baseline="middle"
+                  (click)="openTransitionDialog(connection)"
+                  [title]="
+                    connection.transitionConfig
+                      ? 'Edit Transition Configuration'
+                      : 'Configure Transition'
+                  "
                 >
-                  {{ connection.label || '→' }}
+                  {{
+                    connection.transitionConfig?.label ||
+                      connection.label ||
+                      '→'
+                  }}
                 </text>
+
+                <!-- Delete button (appears on hover) -->
+                <g
+                  class="connection-delete-btn"
+                  [attr.transform]="
+                    'translate(' +
+                    getConnectionDeleteButtonPosition(connection).x +
+                    ',' +
+                    getConnectionDeleteButtonPosition(connection).y +
+                    ')'
+                  "
+                  (click)="deleteConnection(connection, $event)"
+                  title="Delete Connection"
+                >
+                  <circle
+                    r="10"
+                    fill="#ef4444"
+                    stroke="#dc2626"
+                    stroke-width="1"
+                    class="delete-btn-bg"
+                  />
+                  <path
+                    d="M-3 -3 L3 3 M-3 3 L3 -3"
+                    stroke="white"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    class="delete-btn-icon"
+                  />
+                </g>
+
+                <!-- Transition indicator -->
+                <circle
+                  *ngIf="connection.transitionConfig"
+                  [attr.cx]="getConnectionLabelPosition(connection).x + 30"
+                  [attr.cy]="getConnectionLabelPosition(connection).y - 10"
+                  r="4"
+                  fill="#10b981"
+                  stroke="#059669"
+                  stroke-width="1"
+                  class="transition-indicator"
+                />
 
                 <!-- Connection points -->
                 <circle
@@ -1490,6 +1694,16 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         (formSaved)="onFormSaved($event)"
         (modalClosed)="closeFormBuilderModal()"
       />
+
+      <!-- Transition Dialog -->
+      <app-transition-dialog
+        *ngIf="showTransitionDialog"
+        [fromNode]="selectedConnectionFromNode"
+        [toNode]="selectedConnectionToNode"
+        [connection]="selectedConnection"
+        (saveTransition)="onTransitionSaved($event)"
+        (closeDialog)="closeTransitionDialog()"
+      />
     </div>
   `,
   styles: [
@@ -1498,8 +1712,29 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         display: flex;
         flex-direction: column;
         height: 100vh;
-        background: #f8fafc;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
         overflow: hidden;
+        position: relative;
+      }
+
+      /* Enhanced modal positioning and backdrop */
+      .workflow-designer-container::before {
+        content: '';
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.1);
+        z-index: 999;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+      }
+
+      .workflow-designer-container.modal-open::before {
+        opacity: 1;
+        pointer-events: auto;
       }
 
       /* Mobile responsive adjustments */
@@ -1710,6 +1945,8 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         flex: 1;
         overflow: auto;
         position: relative;
+        background: rgba(255, 255, 255, 0.5);
+        backdrop-filter: blur(10px);
       }
 
       /* Mobile layout adjustments */
@@ -1729,6 +1966,8 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         background: white;
         border-right: 1px solid #e2e8f0;
         overflow-y: auto;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(10px);
       }
 
       .sidebar-section {
@@ -1855,9 +2094,10 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         flex: 1;
         position: relative;
         overflow: auto;
-        padding: 20px;
-        min-width: 1200px;
-        min-height: 1000px;
+        padding: 12px;
+        width: 100%;
+        min-width: 0;
+        min-height: calc(100vh - 200px);
         background: linear-gradient(rgba(0, 0, 0, 0.02) 1px, transparent 1px),
           linear-gradient(90deg, rgba(0, 0, 0, 0.02) 1px, transparent 1px);
         background-size: 20px 20px;
@@ -1877,6 +2117,12 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         image-rendering: -webkit-optimize-contrast;
         image-rendering: crisp-edges;
         transform-origin: center center;
+      }
+
+      /* End node visual cue and disable pointer for connect handle area */
+      .workflow-node.finish {
+        border-color: #10b981;
+        box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
       }
 
       /* Mobile node adjustments */
@@ -2186,7 +2432,8 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
 
       .connection-line:hover {
         stroke-width: 4;
-        stroke: #ef4444;
+        stroke: #3b82f6;
+        filter: url(#glow-hover);
       }
 
       .connection-point {
@@ -2405,113 +2652,339 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         color: rgba(255, 255, 255, 0.8);
       }
 
-      /* Templates Dropdown */
-      .templates-dropdown {
-        position: absolute;
-        top: 100%;
+      /* Templates Modal */
+      .templates-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
         right: 0;
-        width: 300px;
-        background: white;
-        border: 1px solid #e2e8f0;
-        border-radius: 8px;
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
         z-index: 1000;
-        margin-top: 4px;
-      }
-
-      .templates-header {
         display: flex;
-        justify-content: space-between;
         align-items: center;
-        padding: 12px 16px;
-        border-bottom: 1px solid #e2e8f0;
+        justify-content: center;
+        padding: 20px;
       }
 
-      .templates-header h4 {
+      .templates-modal {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        width: 100%;
+        max-width: 1200px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        animation: slideIn 0.3s ease-out;
+      }
+
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: scale(0.95) translateY(-20px);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1) translateY(0);
+        }
+      }
+
+      .templates-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 24px 32px;
+        border-bottom: 1px solid #e2e8f0;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+      }
+
+      .templates-modal-title {
+        display: flex;
+        align-items: center;
+        gap: 12px;
         margin: 0;
-        font-size: 0.875rem;
+        font-size: 1.5rem;
         font-weight: 600;
         color: #1e293b;
       }
 
-      .template-controls {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+      .templates-modal-icon {
+        width: 24px;
+        height: 24px;
+        color: #3b82f6;
       }
 
-      .template-filter {
-        padding: 4px 8px;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
-        font-size: 0.75rem;
-        background: white;
-        color: #374151;
-      }
-
-      .template-filter:focus {
-        outline: none;
-        border-color: #3b82f6;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
-      }
-
-      .templates-list {
-        max-height: 300px;
-        overflow-y: auto;
-      }
-
-      .template-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px 16px;
+      .templates-modal-close {
+        width: 40px;
+        height: 40px;
+        border: none;
+        background: rgba(255, 255, 255, 0.8);
+        border-radius: 8px;
+        color: #64748b;
         cursor: pointer;
-        transition: background-color 0.2s;
-      }
-
-      .template-item:hover {
-        background: #f8fafc;
-      }
-
-      .template-icon {
-        width: 32px;
-        height: 32px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: #f1f5f9;
-        border-radius: 6px;
-        color: #64748b;
+        transition: all 0.2s;
+        backdrop-filter: blur(10px);
       }
 
-      .template-icon svg {
+      .templates-modal-close:hover {
+        background: rgba(255, 255, 255, 0.9);
+        color: #374151;
+        transform: scale(1.05);
+      }
+
+      .templates-modal-close svg {
         width: 20px;
         height: 20px;
       }
 
-      .template-info {
+      .templates-modal-controls {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 20px 32px;
+        border-bottom: 1px solid #e2e8f0;
+        background: #f8fafc;
+      }
+
+      .template-search {
+        position: relative;
         flex: 1;
+        max-width: 400px;
       }
 
-      .template-name {
-        font-weight: 500;
-        color: #1e293b;
+      .template-search-input {
+        width: 100%;
+        padding: 12px 16px 12px 44px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
         font-size: 0.875rem;
+        background: white;
+        transition: all 0.2s;
       }
 
-      .template-category {
+      .template-search-input:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .template-search-icon {
+        position: absolute;
+        left: 16px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 16px;
+        height: 16px;
+        color: #64748b;
+      }
+
+      .template-category-filter {
+        padding: 12px 16px;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        background: white;
+        color: #374151;
+        min-width: 150px;
+        transition: all 0.2s;
+      }
+
+      .template-category-filter:focus {
+        outline: none;
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+      }
+
+      .templates-modal-content {
+        flex: 1;
+        overflow-y: auto;
+        padding: 24px;
+      }
+
+      .templates-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 16px;
+      }
+
+      .template-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+
+      .template-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+        border-color: #3b82f6;
+      }
+
+      .template-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border-bottom: 1px solid #e2e8f0;
+      }
+
+      .template-card-icon {
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: white;
+        border-radius: 8px;
         color: #3b82f6;
-        font-size: 0.625rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .template-card-icon svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .template-card-category {
+        color: #3b82f6;
+        font-size: 0.75rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.05em;
-        margin-top: 2px;
+        background: rgba(59, 130, 246, 0.1);
+        padding: 4px 8px;
+        border-radius: 4px;
       }
 
-      .template-description {
+      .template-card-body {
+        padding: 16px;
+      }
+
+      .template-card-name {
+        margin: 0 0 8px 0;
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: #1e293b;
+      }
+
+      .template-card-description {
+        margin: 0 0 12px 0;
+        color: #64748b;
+        font-size: 0.875rem;
+        line-height: 1.5;
+      }
+
+      .template-card-stats {
+        display: flex;
+        gap: 12px;
+      }
+
+      .template-stat {
+        display: flex;
+        align-items: center;
+        gap: 6px;
         color: #64748b;
         font-size: 0.75rem;
-        margin-top: 4px;
+        font-weight: 500;
+      }
+
+      .template-stat-icon {
+        width: 14px;
+        height: 14px;
+      }
+
+      .template-card-footer {
+        padding: 12px 16px;
+        border-top: 1px solid #e2e8f0;
+        background: #f8fafc;
+      }
+
+      .template-use-btn {
+        width: 100%;
+        padding: 10px 16px;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+      }
+
+      .template-use-btn:hover {
+        background: #2563eb;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
+      }
+
+      /* Responsive adjustments for templates modal */
+      @media (max-width: 1024px) {
+        .templates-modal {
+          max-width: 95vw;
+          max-height: 95vh;
+        }
+
+        .templates-grid {
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 12px;
+        }
+
+        .templates-modal-header {
+          padding: 20px 24px;
+        }
+
+        .templates-modal-controls {
+          padding: 16px 24px;
+          flex-direction: column;
+          align-items: stretch;
+        }
+
+        .template-search {
+          max-width: none;
+        }
+
+        .templates-modal-content {
+          padding: 20px;
+        }
+      }
+
+      @media (max-width: 768px) {
+        .templates-modal-overlay {
+          padding: 16px;
+        }
+
+        .templates-grid {
+          grid-template-columns: 1fr;
+          gap: 8px;
+        }
+
+        .templates-modal-header {
+          padding: 16px 20px;
+        }
+
+        .templates-modal-title {
+          font-size: 1.25rem;
+        }
+
+        .templates-modal-controls {
+          padding: 12px 20px;
+        }
+
+        .templates-modal-content {
+          padding: 16px;
+        }
       }
 
       /* Status Bar */
@@ -2682,81 +3155,700 @@ import { FormBuilderModalComponent } from '../../components/form-builder-modal/f
         stroke-width: 4;
         filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
       }
+
+      /* Connection Context Menu */
+      .connection-context-menu {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        padding: 8px 0;
+        min-width: 200px;
+        z-index: 10000;
+      }
+
+      .context-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        cursor: pointer;
+        font-size: 0.875rem;
+        color: #374151;
+        transition: background-color 0.2s;
+      }
+
+      .context-menu-item:hover {
+        background: #f8fafc;
+      }
+
+      .context-menu-item svg {
+        color: #64748b;
+      }
+
+      /* Enhanced connection styling for transitions */
+      .connection-line.has-transition {
+        stroke-dasharray: 8, 4;
+        animation: flow 2s linear infinite;
+      }
+
+      @keyframes flow {
+        0% {
+          stroke-dashoffset: 0;
+        }
+        100% {
+          stroke-dashoffset: -12;
+        }
+      }
+
+      .connection-label {
+        font-size: 12px;
+        font-weight: 600;
+        fill: #374151;
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+        pointer-events: none;
+        cursor: pointer;
+      }
+
+      .connection-label:hover {
+        fill: #3b82f6;
+        text-shadow: 0 1px 2px rgba(255, 255, 255, 1);
+      }
+
+      .transition-indicator {
+        cursor: pointer;
+        transition: r 0.2s;
+      }
+
+      .transition-indicator:hover {
+        r: 6;
+      }
+
+      /* Connection delete button styles */
+      .connection-group {
+        position: relative;
+      }
+
+      .connection-delete-btn {
+        opacity: 0;
+        cursor: pointer;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        pointer-events: none;
+        transform: scale(0.8);
+      }
+
+      .connection-group:hover .connection-delete-btn {
+        opacity: 1;
+        pointer-events: all;
+        transform: scale(1);
+      }
+
+      /* Enhanced node styles for default nodes */
+      .workflow-node.start,
+      .workflow-node.finish {
+        border-width: 3px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .workflow-node.start .node-header,
+      .workflow-node.finish .node-header {
+        position: relative;
+      }
+
+      .workflow-node.start .node-header::after,
+      .workflow-node.finish .node-header::after {
+        content: 'Default';
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        background: #10b981;
+        color: white;
+        font-size: 0.625rem;
+        font-weight: 600;
+        padding: 2px 6px;
+        border-radius: 4px;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+
+      .delete-btn-bg {
+        transition: fill 0.2s ease;
+      }
+
+      .connection-delete-btn:hover .delete-btn-bg {
+        fill: #dc2626;
+      }
+
+      .delete-btn-icon {
+        transition: stroke-width 0.2s ease;
+      }
+
+      .connection-delete-btn:hover .delete-btn-icon {
+        stroke-width: 2.5;
+      }
     `,
   ],
 })
-export class WorkflowDesignerPageComponent implements OnInit {
+export class WorkflowDesignerPageComponent
+  implements OnInit, AfterViewInit, OnDestroy
+{
   @ViewChild('workflowCanvas') workflowCanvas!: ElementRef;
 
   showFormBuilderModal = false;
   selectedFormNode: any = null;
   currentWorkflow: Workflow | null = null;
 
-  availableActivities = [
-    {
-      id: 'form',
-      name: 'Form Builder',
-      description: 'Create and display a custom form',
-      icon: 'form',
-      type: 'form',
-    },
-    {
-      id: 'email',
-      name: 'Send Email',
-      description: 'Send an email notification',
-      icon: 'email',
-      type: 'email',
-    },
-    {
-      id: 'condition',
-      name: 'Condition',
-      description: 'Add conditional logic to workflow',
-      icon: 'condition',
-      type: 'condition',
-    },
-    {
-      id: 'delay',
-      name: 'Delay',
-      description: 'Add a time delay to workflow',
-      icon: 'delay',
-      type: 'delay',
-    },
-    {
-      id: 'approval',
-      name: 'Approval',
-      description: 'Require approval from user or group',
-      icon: 'approval',
-      type: 'approval',
-    },
-    {
-      id: 'notification',
-      name: 'Notification',
-      description: 'Send notification to users',
-      icon: 'notification',
-      type: 'notification',
-    },
-    {
-      id: 'webhook',
-      name: 'Webhook',
-      description: 'Call external API endpoint',
-      icon: 'webhook',
-      type: 'webhook',
-    },
-    {
-      id: 'database',
-      name: 'Database',
-      description: 'Save or retrieve data from database',
-      icon: 'database',
-      type: 'database',
-    },
-    {
-      id: 'finish',
-      name: 'Finish',
-      description: 'End the workflow execution',
-      icon: 'finish',
-      type: 'finish',
-    },
-  ];
+  // Transition dialog properties
+  showTransitionDialog = false;
+  selectedConnection: any = null;
+  selectedConnectionFromNode: any = null;
+  selectedConnectionToNode: any = null;
+
+  // Get category-specific activities
+  getAvailableActivities(): any[] {
+    const baseActivities = [
+      {
+        id: 'form',
+        name: 'Form Builder',
+        description: 'Create and display a custom form',
+        icon: 'form',
+        type: 'form',
+        categories: [
+          'all',
+          'audit-management',
+          'safety-issues',
+          'work-permits',
+          'emergency-contacts',
+          'safety-announcements',
+          'msds',
+          'penalty-management',
+          'actions-tracker',
+          'mobile-access',
+          'digital-eye',
+          'security',
+          'assets-inspection',
+        ],
+      },
+      {
+        id: 'email',
+        name: 'Send Email',
+        description: 'Send an email notification',
+        icon: 'email',
+        type: 'email',
+        categories: [
+          'all',
+          'audit-management',
+          'safety-issues',
+          'work-permits',
+          'emergency-contacts',
+          'safety-announcements',
+          'msds',
+          'penalty-management',
+          'actions-tracker',
+          'mobile-access',
+          'digital-eye',
+          'security',
+          'assets-inspection',
+        ],
+      },
+      {
+        id: 'condition',
+        name: 'Condition',
+        description: 'Add conditional logic to workflow',
+        icon: 'condition',
+        type: 'condition',
+        categories: [
+          'all',
+          'audit-management',
+          'safety-issues',
+          'work-permits',
+          'emergency-contacts',
+          'safety-announcements',
+          'msds',
+          'penalty-management',
+          'actions-tracker',
+          'mobile-access',
+          'digital-eye',
+          'security',
+          'assets-inspection',
+        ],
+      },
+      {
+        id: 'delay',
+        name: 'Delay',
+        description: 'Add a time delay to workflow',
+        icon: 'delay',
+        type: 'delay',
+        categories: [
+          'all',
+          'audit-management',
+          'safety-issues',
+          'work-permits',
+          'emergency-contacts',
+          'safety-announcements',
+          'msds',
+          'penalty-management',
+          'actions-tracker',
+          'mobile-access',
+          'digital-eye',
+          'security',
+          'assets-inspection',
+        ],
+      },
+    ];
+
+    const auditManagementActivities = [
+      {
+        id: 'audit-schedule',
+        name: 'Audit Schedule',
+        description: 'Schedule and plan audits',
+        icon: 'form',
+        type: 'form',
+        categories: ['audit-management'],
+      },
+      {
+        id: 'audit-execution',
+        name: 'Audit Execution',
+        description: 'Execute audit procedures',
+        icon: 'form',
+        type: 'form',
+        categories: ['audit-management'],
+      },
+      {
+        id: 'audit-findings',
+        name: 'Audit Findings',
+        description: 'Document audit findings and recommendations',
+        icon: 'form',
+        type: 'form',
+        categories: ['audit-management'],
+      },
+      {
+        id: 'audit-approval',
+        name: 'Audit Approval',
+        description: 'Approve audit reports',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['audit-management'],
+      },
+    ];
+
+    const safetyIssuesActivities = [
+      {
+        id: 'safety-incident-report',
+        name: 'Safety Incident Report',
+        description: 'Report safety incidents and hazards',
+        icon: 'form',
+        type: 'form',
+        categories: ['safety-issues'],
+      },
+      {
+        id: 'safety-investigation',
+        name: 'Safety Investigation',
+        description: 'Investigate safety incidents',
+        icon: 'form',
+        type: 'form',
+        categories: ['safety-issues'],
+      },
+      {
+        id: 'safety-corrective-action',
+        name: 'Corrective Action',
+        description: 'Implement corrective actions',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['safety-issues'],
+      },
+      {
+        id: 'safety-notification',
+        name: 'Safety Notification',
+        description: 'Send safety alerts and notifications',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['safety-issues'],
+      },
+    ];
+
+    const workPermitsActivities = [
+      {
+        id: 'permit-application',
+        name: 'Permit Application',
+        description: 'Apply for work permits',
+        icon: 'form',
+        type: 'form',
+        categories: ['work-permits'],
+      },
+      {
+        id: 'permit-review',
+        name: 'Permit Review',
+        description: 'Review work permit applications',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['work-permits'],
+      },
+      {
+        id: 'permit-issuance',
+        name: 'Permit Issuance',
+        description: 'Issue approved work permits',
+        icon: 'form',
+        type: 'form',
+        categories: ['work-permits'],
+      },
+      {
+        id: 'permit-monitoring',
+        name: 'Permit Monitoring',
+        description: 'Monitor active work permits',
+        icon: 'form',
+        type: 'form',
+        categories: ['work-permits'],
+      },
+    ];
+
+    const emergencyContactsActivities = [
+      {
+        id: 'contact-registration',
+        name: 'Contact Registration',
+        description: 'Register emergency contacts',
+        icon: 'form',
+        type: 'form',
+        categories: ['emergency-contacts'],
+      },
+      {
+        id: 'contact-verification',
+        name: 'Contact Verification',
+        description: 'Verify emergency contact information',
+        icon: 'form',
+        type: 'form',
+        categories: ['emergency-contacts'],
+      },
+      {
+        id: 'emergency-alert',
+        name: 'Emergency Alert',
+        description: 'Send emergency alerts to contacts',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['emergency-contacts'],
+      },
+      {
+        id: 'contact-update',
+        name: 'Contact Update',
+        description: 'Update emergency contact details',
+        icon: 'form',
+        type: 'form',
+        categories: ['emergency-contacts'],
+      },
+    ];
+
+    const safetyAnnouncementsActivities = [
+      {
+        id: 'announcement-creation',
+        name: 'Announcement Creation',
+        description: 'Create safety announcements',
+        icon: 'form',
+        type: 'form',
+        categories: ['safety-announcements'],
+      },
+      {
+        id: 'announcement-approval',
+        name: 'Announcement Approval',
+        description: 'Approve safety announcements',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['safety-announcements'],
+      },
+      {
+        id: 'announcement-distribution',
+        name: 'Announcement Distribution',
+        description: 'Distribute safety announcements',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['safety-announcements'],
+      },
+      {
+        id: 'announcement-tracking',
+        name: 'Announcement Tracking',
+        description: 'Track announcement readership',
+        icon: 'form',
+        type: 'form',
+        categories: ['safety-announcements'],
+      },
+    ];
+
+    const msdsActivities = [
+      {
+        id: 'msds-upload',
+        name: 'MSDS Upload',
+        description: 'Upload Material Safety Data Sheets',
+        icon: 'form',
+        type: 'form',
+        categories: ['msds'],
+      },
+      {
+        id: 'msds-review',
+        name: 'MSDS Review',
+        description: 'Review and approve MSDS documents',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['msds'],
+      },
+      {
+        id: 'msds-distribution',
+        name: 'MSDS Distribution',
+        description: 'Distribute MSDS to relevant personnel',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['msds'],
+      },
+      {
+        id: 'msds-update',
+        name: 'MSDS Update',
+        description: 'Update existing MSDS documents',
+        icon: 'form',
+        type: 'form',
+        categories: ['msds'],
+      },
+    ];
+
+    const penaltyManagementActivities = [
+      {
+        id: 'penalty-assessment',
+        name: 'Penalty Assessment',
+        description: 'Assess penalties for violations',
+        icon: 'form',
+        type: 'form',
+        categories: ['penalty-management'],
+      },
+      {
+        id: 'penalty-approval',
+        name: 'Penalty Approval',
+        description: 'Approve penalty assessments',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['penalty-management'],
+      },
+      {
+        id: 'penalty-notification',
+        name: 'Penalty Notification',
+        description: 'Notify parties of penalties',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['penalty-management'],
+      },
+      {
+        id: 'penalty-appeal',
+        name: 'Penalty Appeal',
+        description: 'Process penalty appeals',
+        icon: 'form',
+        type: 'form',
+        categories: ['penalty-management'],
+      },
+    ];
+
+    const actionsTrackerActivities = [
+      {
+        id: 'action-creation',
+        name: 'Action Creation',
+        description: 'Create action items and tasks',
+        icon: 'form',
+        type: 'form',
+        categories: ['actions-tracker'],
+      },
+      {
+        id: 'action-assignment',
+        name: 'Action Assignment',
+        description: 'Assign actions to responsible parties',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['actions-tracker'],
+      },
+      {
+        id: 'action-tracking',
+        name: 'Action Tracking',
+        description: 'Track action item progress',
+        icon: 'form',
+        type: 'form',
+        categories: ['actions-tracker'],
+      },
+      {
+        id: 'action-completion',
+        name: 'Action Completion',
+        description: 'Mark actions as completed',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['actions-tracker'],
+      },
+    ];
+
+    const mobileAccessActivities = [
+      {
+        id: 'mobile-request',
+        name: 'Mobile Access Request',
+        description: 'Request mobile application access',
+        icon: 'form',
+        type: 'form',
+        categories: ['mobile-access'],
+      },
+      {
+        id: 'mobile-approval',
+        name: 'Mobile Access Approval',
+        description: 'Approve mobile access requests',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['mobile-access'],
+      },
+      {
+        id: 'mobile-provisioning',
+        name: 'Mobile Provisioning',
+        description: 'Provision mobile access',
+        icon: 'form',
+        type: 'form',
+        categories: ['mobile-access'],
+      },
+      {
+        id: 'mobile-monitoring',
+        name: 'Mobile Monitoring',
+        description: 'Monitor mobile access usage',
+        icon: 'form',
+        type: 'form',
+        categories: ['mobile-access'],
+      },
+    ];
+
+    const digitalEyeActivities = [
+      {
+        id: 'digital-eye-setup',
+        name: 'Digital Eye Setup',
+        description: 'Setup digital monitoring systems',
+        icon: 'form',
+        type: 'form',
+        categories: ['digital-eye'],
+      },
+      {
+        id: 'digital-eye-monitoring',
+        name: 'Digital Eye Monitoring',
+        description: 'Monitor digital surveillance feeds',
+        icon: 'form',
+        type: 'form',
+        categories: ['digital-eye'],
+      },
+      {
+        id: 'digital-eye-alert',
+        name: 'Digital Eye Alert',
+        description: 'Send alerts from digital monitoring',
+        icon: 'notification',
+        type: 'notification',
+        categories: ['digital-eye'],
+      },
+      {
+        id: 'digital-eye-report',
+        name: 'Digital Eye Report',
+        description: 'Generate monitoring reports',
+        icon: 'form',
+        type: 'form',
+        categories: ['digital-eye'],
+      },
+    ];
+
+    const securityActivities = [
+      {
+        id: 'security-assessment',
+        name: 'Security Assessment',
+        description: 'Conduct security assessments',
+        icon: 'form',
+        type: 'form',
+        categories: ['security'],
+      },
+      {
+        id: 'security-incident',
+        name: 'Security Incident',
+        description: 'Report security incidents',
+        icon: 'form',
+        type: 'form',
+        categories: ['security'],
+      },
+      {
+        id: 'security-response',
+        name: 'Security Response',
+        description: 'Respond to security incidents',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['security'],
+      },
+      {
+        id: 'security-audit',
+        name: 'Security Audit',
+        description: 'Conduct security audits',
+        icon: 'form',
+        type: 'form',
+        categories: ['security'],
+      },
+    ];
+
+    const assetsInspectionActivities = [
+      {
+        id: 'inspection-schedule',
+        name: 'Inspection Schedule',
+        description: 'Schedule asset inspections',
+        icon: 'form',
+        type: 'form',
+        categories: ['assets-inspection'],
+      },
+      {
+        id: 'inspection-execution',
+        name: 'Inspection Execution',
+        description: 'Execute asset inspections',
+        icon: 'form',
+        type: 'form',
+        categories: ['assets-inspection'],
+      },
+      {
+        id: 'inspection-findings',
+        name: 'Inspection Findings',
+        description: 'Document inspection findings',
+        icon: 'form',
+        type: 'form',
+        categories: ['assets-inspection'],
+      },
+      {
+        id: 'inspection-followup',
+        name: 'Inspection Follow-up',
+        description: 'Follow up on inspection findings',
+        icon: 'approval',
+        type: 'approval',
+        categories: ['assets-inspection'],
+      },
+    ];
+
+    const allActivities = [
+      ...baseActivities,
+      ...auditManagementActivities,
+      ...safetyIssuesActivities,
+      ...workPermitsActivities,
+      ...emergencyContactsActivities,
+      ...safetyAnnouncementsActivities,
+      ...msdsActivities,
+      ...penaltyManagementActivities,
+      ...actionsTrackerActivities,
+      ...mobileAccessActivities,
+      ...digitalEyeActivities,
+      ...securityActivities,
+      ...assetsInspectionActivities,
+    ];
+
+    // Filter activities based on current category
+    if (this.workflowCategory === 'all') {
+      return allActivities;
+    }
+
+    return allActivities.filter(
+      (activity) =>
+        activity.categories.includes(this.workflowCategory) ||
+        activity.categories.includes('all')
+    );
+  }
+
+  // Getter for backward compatibility
+  get availableActivities() {
+    return this.getAvailableActivities();
+  }
 
   workflowNodes: any[] = [];
   workflowConnections: any[] = [];
@@ -2791,34 +3883,110 @@ export class WorkflowDesignerPageComponent implements OnInit {
   canvasHeight = 800;
   initialPinchDistance: number | null = null;
   Math = Math; // Make Math available in template
+  private resizeObserver?: ResizeObserver;
 
   // Workflow metadata
   workflowTitle = 'My Workflow';
-  workflowCategory = 'General';
+  workflowCategory = 'all';
   workflowDescription =
     'A custom workflow created with the Form Builder & Workflow Designer';
 
   // Workflow categories
   workflowCategories = [
-    'General',
-    'Approval',
-    'Onboarding',
-    'Support',
-    'Sales',
-    'Marketing',
-    'HR',
-    'Finance',
-    'IT',
-    'Custom',
+    'all',
+    'audit-management',
+    'safety-issues',
+    'work-permits',
+    'emergency-contacts',
+    'safety-announcements',
+    'msds',
+    'penalty-management',
+    'actions-tracker',
+    'mobile-access',
+    'digital-eye',
+    'security',
+    'assets-inspection',
   ];
 
   // Template filtering
   selectedTemplateCategory = '';
+  templateSearchTerm = '';
 
   // Undo/Redo history
   private history: any[] = [];
   private historyIndex = -1;
   private maxHistorySize = 50;
+
+  ngAfterViewInit(): void {
+    // Initialize canvas size to full width of container
+    this.updateCanvasSize();
+
+    // Observe container resize
+    if ('ResizeObserver' in window) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.updateCanvasSize();
+      });
+      if (this.workflowCanvas?.nativeElement) {
+        this.resizeObserver.observe(this.workflowCanvas.nativeElement);
+      }
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.resizeObserver && this.workflowCanvas?.nativeElement) {
+      this.resizeObserver.unobserve(this.workflowCanvas.nativeElement);
+      this.resizeObserver.disconnect();
+    }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize() {
+    this.updateCanvasSize();
+  }
+
+  private updateCanvasSize() {
+    try {
+      const canvasEl: HTMLElement | null =
+        this.workflowCanvas?.nativeElement || null;
+      if (!canvasEl) return;
+      const contentEl = canvasEl.querySelector(
+        '.canvas-content'
+      ) as HTMLElement | null;
+
+      // Prefer the visible canvas container width
+      const containerRect = canvasEl.getBoundingClientRect();
+      const targetWidth = Math.max(0, Math.floor(containerRect.width));
+
+      // Fallback to content width if container width is zero (rare)
+      const contentRect = contentEl?.getBoundingClientRect();
+      const fallbackWidth = contentRect
+        ? Math.floor(contentRect.width)
+        : this.canvasWidth;
+
+      this.canvasWidth = targetWidth || fallbackWidth || window.innerWidth;
+
+      // Keep height sensible to viewport
+      const headerEl = document.querySelector(
+        '.workflow-header'
+      ) as HTMLElement | null;
+      const headerHeight = headerEl
+        ? headerEl.getBoundingClientRect().height
+        : 0;
+      const statusBarEl = document.querySelector(
+        '.status-bar'
+      ) as HTMLElement | null;
+      const statusBarHeight = statusBarEl
+        ? statusBarEl.getBoundingClientRect().height
+        : 0;
+      const availableHeight = Math.max(
+        300,
+        window.innerHeight - headerHeight - statusBarHeight - 40
+      );
+      this.canvasHeight = availableHeight;
+    } catch {
+      // No-op: avoid breaking rendering if DOM not ready
+    }
+  }
 
   // Workflow templates
   workflowTemplates = [
@@ -3206,8 +4374,9 @@ export class WorkflowDesignerPageComponent implements OnInit {
 
   // Computed property for filtered activities
   get filteredActivities() {
-    if (!this.searchTerm) return this.availableActivities;
-    return this.availableActivities.filter(
+    const activities = this.getAvailableActivities();
+    if (!this.searchTerm) return activities;
+    return activities.filter(
       (activity) =>
         activity.name.toLowerCase().includes(this.searchTerm.toLowerCase()) ||
         activity.description
@@ -3216,12 +4385,115 @@ export class WorkflowDesignerPageComponent implements OnInit {
     );
   }
 
+  // Remember previous category to allow reverting selection
+  previousWorkflowCategory: string = this.workflowCategory;
+  private dialog = inject(MatDialog);
+
+  // Handle category change with confirm dialog
+  onCategoryChange(newCategory?: string) {
+    const nextCategory = newCategory ?? this.workflowCategory;
+
+    // If no nodes besides defaults exist, just switch
+    const nonDefaultNodes = this.workflowNodes.filter(
+      (n) => n.type !== 'start' && n.type !== 'finish'
+    );
+
+    if (nonDefaultNodes.length > 0) {
+      const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+        width: '420px',
+        data: {
+          title: 'Change Category?',
+          message:
+            'Changing category will clear the current workflow nodes and connections. Do you want to continue?',
+          confirmText: 'Yes, clear',
+          cancelText: 'No, keep',
+        },
+      });
+
+      dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+        if (!confirmed) {
+          this.workflowCategory = this.previousWorkflowCategory;
+          return;
+        }
+
+        // Clear and re-seed
+        this.workflowNodes = [];
+        this.workflowConnections = [];
+        this.selectedNode = null;
+        this.addStartAndEndNodes();
+        this.saveToHistory();
+
+        // Apply the new category
+        this.workflowCategory = nextCategory;
+        this.previousWorkflowCategory = nextCategory;
+        this.searchTerm = this.searchTerm;
+      });
+      return;
+    }
+
+    // Nothing to clear, just switch
+    this.workflowCategory = nextCategory;
+    this.previousWorkflowCategory = nextCategory;
+    this.searchTerm = this.searchTerm;
+  }
+
+  // Map template categories to new category system
+  mapTemplateCategory(oldCategory: string): string {
+    const categoryMap: { [key: string]: string } = {
+      General: 'all',
+      Approval: 'all',
+      Onboarding: 'all',
+      Support: 'all',
+      Sales: 'all',
+      Marketing: 'all',
+      HR: 'all',
+      Finance: 'all',
+      IT: 'all',
+      Custom: 'all',
+      'Audit Management': 'audit-management',
+      'Safety Issues': 'safety-issues',
+      'Work Permits': 'work-permits',
+      'Emergency Contacts': 'emergency-contacts',
+      'Safety Announcements': 'safety-announcements',
+      MSDS: 'msds',
+      'Penalty Management': 'penalty-management',
+      'Actions Tracker': 'actions-tracker',
+      'Mobile Access': 'mobile-access',
+      'Digital Eye': 'digital-eye',
+      Security: 'security',
+      'Assets Inspection': 'assets-inspection',
+    };
+    return categoryMap[oldCategory] || 'all';
+  }
+
   // Computed property for filtered templates
   get filteredTemplates() {
-    if (!this.selectedTemplateCategory) return this.workflowTemplates;
-    return this.workflowTemplates.filter(
-      (template) => template.category === this.selectedTemplateCategory
-    );
+    let filtered = this.workflowTemplates;
+
+    // Filter by category
+    if (this.selectedTemplateCategory) {
+      filtered = filtered.filter(
+        (template) => template.category === this.selectedTemplateCategory
+      );
+    }
+
+    // Filter by search term
+    if (this.templateSearchTerm) {
+      filtered = filtered.filter(
+        (template) =>
+          template.name
+            .toLowerCase()
+            .includes(this.templateSearchTerm.toLowerCase()) ||
+          template.description
+            .toLowerCase()
+            .includes(this.templateSearchTerm.toLowerCase()) ||
+          template.category
+            .toLowerCase()
+            .includes(this.templateSearchTerm.toLowerCase())
+      );
+    }
+
+    return filtered;
   }
 
   constructor(private workflowService: WorkflowService) {
@@ -3229,7 +4501,7 @@ export class WorkflowDesignerPageComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.addStartNode();
+    this.addStartAndEndNodes();
     this.saveToHistory();
 
     // Initialize zoom after view is ready
@@ -3301,24 +4573,40 @@ export class WorkflowDesignerPageComponent implements OnInit {
     }
   }
 
-  addStartNode() {
+  addStartAndEndNodes() {
     // Check if start node already exists
     const existingStartNode = this.workflowNodes.find(
       (node) => node.type === 'start'
     );
-    if (existingStartNode) {
-      return; // Don't add another start node
+    if (!existingStartNode) {
+      const startNode = {
+        id: 'start',
+        title: 'Start',
+        description: 'Workflow starting point',
+        type: 'start',
+        x: 50,
+        y: 50,
+        isDefault: true, // Mark as default node
+      };
+      this.workflowNodes.push(startNode);
     }
 
-    const startNode = {
-      id: 'start',
-      title: 'Start',
-      description: 'Workflow starting point',
-      type: 'start',
-      x: 50,
-      y: 50,
-    };
-    this.workflowNodes.push(startNode);
+    // Check if end node already exists
+    const existingEndNode = this.workflowNodes.find(
+      (node) => node.type === 'finish'
+    );
+    if (!existingEndNode) {
+      const endNode = {
+        id: 'finish',
+        title: 'End',
+        description: 'Workflow ending point',
+        type: 'finish',
+        x: 850,
+        y: 50,
+        isDefault: true, // Mark as default node
+      };
+      this.workflowNodes.push(endNode);
+    }
   }
 
   addActivity(activity: any) {
@@ -3343,14 +4631,37 @@ export class WorkflowDesignerPageComponent implements OnInit {
 
   deleteNode(node: any, event: Event) {
     event.stopPropagation();
-    const index = this.workflowNodes.indexOf(node);
-    if (index > -1) {
-      this.workflowNodes.splice(index, 1);
+
+    if (node.isDefault) {
+      alert('Cannot delete default start or end nodes.');
+      return;
     }
-    if (this.selectedNode === node) {
-      this.selectedNode = null;
-    }
-    this.saveToHistory();
+
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      data: {
+        title: 'Delete Node?',
+        message:
+          'Deleting this node will also remove its connections. Continue?',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+      },
+    });
+
+    dialogRef.afterClosed().subscribe((confirmed: boolean) => {
+      if (!confirmed) return;
+
+      // Remove node
+      const index = this.workflowNodes.indexOf(node);
+      if (index > -1) this.workflowNodes.splice(index, 1);
+
+      // Remove associated connections
+      this.workflowConnections = this.workflowConnections.filter(
+        (c) => c.from !== node.id && c.to !== node.id
+      );
+
+      if (this.selectedNode?.id === node.id) this.selectedNode = null;
+      this.saveToHistory();
+    });
   }
 
   onDragStart(event: DragEvent, activity: any) {
@@ -3415,6 +4726,8 @@ export class WorkflowDesignerPageComponent implements OnInit {
     node.config = {
       formId: formData.formId,
       formData: formData,
+      // Add form fields to response object
+      responseObject: this.generateResponseObject(formData.fields || []),
     };
     this.showFormBuilderModal = false;
     this.selectedFormNode = null;
@@ -3425,11 +4738,135 @@ export class WorkflowDesignerPageComponent implements OnInit {
     this.selectedFormNode = null;
   }
 
+  // Transition dialog methods
+  openTransitionDialog(connection: any) {
+    this.selectedConnection = connection;
+    this.selectedConnectionFromNode = this.workflowNodes.find(
+      (n) => n.id === connection.from
+    );
+    this.selectedConnectionToNode = this.workflowNodes.find(
+      (n) => n.id === connection.to
+    );
+    this.showTransitionDialog = true;
+  }
+
+  onTransitionSaved(transitionConfig: TransitionConfig) {
+    // Update the connection with transition configuration
+    const connection = this.workflowConnections.find(
+      (c) => c.id === transitionConfig.id
+    );
+    if (connection) {
+      connection.label = transitionConfig.label;
+      connection.transitionConfig = transitionConfig;
+    } else {
+      // Create new connection with transition config
+      const newConnection = {
+        id: transitionConfig.id,
+        from: this.selectedConnectionFromNode.id,
+        to: this.selectedConnectionToNode.id,
+        label: transitionConfig.label,
+        transitionConfig: transitionConfig,
+        fromPoint: {
+          x: this.selectedConnectionFromNode.x + 200,
+          y: this.selectedConnectionFromNode.y + 25,
+        },
+        toPoint: {
+          x: this.selectedConnectionToNode.x,
+          y: this.selectedConnectionToNode.y + 25,
+        },
+      };
+      this.workflowConnections.push(newConnection);
+    }
+
+    this.closeTransitionDialog();
+    this.saveToHistory();
+  }
+
+  closeTransitionDialog() {
+    this.showTransitionDialog = false;
+    this.selectedConnection = null;
+    this.selectedConnectionFromNode = null;
+    this.selectedConnectionToNode = null;
+  }
+
+  showConnectionContextMenu(event: MouseEvent, connection: any) {
+    event.preventDefault();
+
+    // Create context menu
+    const menu = document.createElement('div');
+    menu.className = 'connection-context-menu';
+    menu.innerHTML = `
+      <div class="context-menu-item" onclick="this.dispatchEvent(new CustomEvent('configure', {detail: '${connection.id}'}))">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+        </svg>
+        Configure Transition
+      </div>
+      <div class="context-menu-item" onclick="this.dispatchEvent(new CustomEvent('delete', {detail: '${connection.id}'}))">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
+        </svg>
+        Delete Connection
+      </div>
+    `;
+
+    // Position menu
+    menu.style.position = 'fixed';
+    menu.style.left = event.clientX + 'px';
+    menu.style.top = event.clientY + 'px';
+    menu.style.zIndex = '10000';
+
+    // Add styles
+    menu.style.cssText += `
+      background: white;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+      padding: 8px 0;
+      min-width: 200px;
+    `;
+
+    // Add event listeners
+    menu.addEventListener('configure', (e: any) => {
+      const conn = this.workflowConnections.find((c) => c.id === e.detail);
+      if (conn) {
+        this.openTransitionDialog(conn);
+      }
+      document.body.removeChild(menu);
+    });
+
+    menu.addEventListener('delete', (e: any) => {
+      const conn = this.workflowConnections.find((c) => c.id === e.detail);
+      if (conn) {
+        this.deleteConnection(conn, event);
+      }
+      document.body.removeChild(menu);
+    });
+
+    // Close menu when clicking outside
+    const closeMenu = () => {
+      if (document.body.contains(menu)) {
+        document.body.removeChild(menu);
+      }
+      document.removeEventListener('click', closeMenu);
+    };
+
+    setTimeout(() => {
+      document.addEventListener('click', closeMenu);
+    }, 0);
+
+    document.body.appendChild(menu);
+  }
+
   saveWorkflow() {
     const workflow = {
       id: `workflow_${Date.now()}`,
       name: this.workflowTitle,
-      category: this.workflowCategory,
+      category:
+        this.workflowCategory === 'all'
+          ? 'General'
+          : this.workflowCategory.toUpperCase(),
       description: this.workflowDescription,
       nodes: this.workflowNodes,
       connections: this.workflowConnections,
@@ -3494,6 +4931,9 @@ export class WorkflowDesignerPageComponent implements OnInit {
 
   // Connection drawing methods
   startConnection(node: any, event: MouseEvent) {
+    if (node?.type === 'finish') {
+      return;
+    }
     event.stopPropagation();
     this.isDrawingConnection = true;
     this.connectionStartNode = node;
@@ -3530,15 +4970,23 @@ export class WorkflowDesignerPageComponent implements OnInit {
         id: `conn_${Date.now()}`,
         from: this.connectionStartNode.id,
         to: targetNode.id,
+        label: '→',
         fromPoint: { ...this.connectionStartPoint },
         toPoint: {
           x: targetNode.x,
           y: targetNode.y + 25,
         },
+        transitionConfig: null,
       };
 
       this.workflowConnections.push(connection);
       this.cancelConnection();
+
+      // Open transition dialog for new connection
+      setTimeout(() => {
+        this.openTransitionDialog(connection);
+      }, 100);
+
       this.saveToHistory();
     }
   }
@@ -3575,7 +5023,7 @@ export class WorkflowDesignerPageComponent implements OnInit {
       this.workflowNodes = [];
       this.workflowConnections = [];
       this.selectedNode = null;
-      this.addStartNode();
+      this.addStartAndEndNodes(); // Add back default nodes
     }
   }
 
@@ -3710,6 +5158,33 @@ export class WorkflowDesignerPageComponent implements OnInit {
     return { x: labelX, y: labelY };
   }
 
+  getConnectionDeleteButtonPosition(connection: any): { x: number; y: number } {
+    const fromX = connection.fromPoint?.x || connection.from.x;
+    const fromY = connection.fromPoint?.y || connection.from.y;
+    const toX = connection.toPoint?.x || connection.to.x;
+    const toY = connection.toPoint?.y || connection.to.y;
+
+    // Vector from start to end
+    const dx = toX - fromX;
+    const dy = toY - fromY;
+    const length = Math.sqrt(dx * dx + dy * dy) || 1;
+
+    // Place the delete button near the target node (20px before the end)
+    const backOff = 20; // distance from the end point along the line
+    const t = Math.max(0, 1 - backOff / length);
+    let bx = fromX + dx * t;
+    let by = fromY + dy * t;
+
+    // Nudge slightly perpendicular to avoid overlapping the arrow
+    const normalOffset = 10;
+    const nx = (-dy / length) * normalOffset;
+    const ny = (dx / length) * normalOffset;
+    bx += nx;
+    by += ny;
+
+    return { x: bx, y: by };
+  }
+
   // Enhanced export with Elsa-compatible format
   exportWorkflow() {
     // Convert to Elsa workflow format
@@ -3722,7 +5197,10 @@ export class WorkflowDesignerPageComponent implements OnInit {
       name: this.workflowTitle,
       displayName: this.workflowTitle,
       description: this.workflowDescription,
-      category: this.workflowCategory,
+      category:
+        this.workflowCategory === 'all'
+          ? 'General'
+          : this.workflowCategory.toUpperCase(),
       persistenceBehavior: 'WorkflowContained',
       deleteCompletedInstances: false,
       isSingleton: false,
@@ -4016,7 +5494,8 @@ export class WorkflowDesignerPageComponent implements OnInit {
     ) {
       // Set workflow metadata from template
       this.workflowTitle = template.name;
-      this.workflowCategory = template.category || 'General';
+      this.workflowCategory =
+        this.mapTemplateCategory(template.category) || 'all';
       this.workflowDescription = template.description;
 
       this.workflowNodes = template.nodes.map((node: any) => ({
@@ -4036,6 +5515,79 @@ export class WorkflowDesignerPageComponent implements OnInit {
       this.saveToHistory();
       this.autoLayout();
     }
+  }
+
+  // Generate response object from form fields
+  generateResponseObject(fields: any[]): any {
+    const responseObject: any = {};
+
+    fields.forEach((field: any) => {
+      // Add field to response object with appropriate type
+      switch (field.type) {
+        case 'text':
+        case 'email':
+        case 'textarea':
+          responseObject[field.name] = {
+            type: 'string',
+            value: '',
+            required: field.required,
+            label: field.label,
+            placeholder: field.placeholder,
+            helpText: field.helpText,
+          };
+          break;
+        case 'number':
+          responseObject[field.name] = {
+            type: 'number',
+            value: 0,
+            required: field.required,
+            label: field.label,
+            placeholder: field.placeholder,
+            helpText: field.helpText,
+          };
+          break;
+        case 'select':
+        case 'radio':
+          responseObject[field.name] = {
+            type: 'string',
+            value: '',
+            required: field.required,
+            label: field.label,
+            options: field.options || [],
+            helpText: field.helpText,
+          };
+          break;
+        case 'checkbox':
+          responseObject[field.name] = {
+            type: 'boolean',
+            value: false,
+            required: field.required,
+            label: field.label,
+            helpText: field.helpText,
+          };
+          break;
+        case 'file':
+          responseObject[field.name] = {
+            type: 'file',
+            value: null,
+            required: field.required,
+            label: field.label,
+            accept: field.accept,
+            helpText: field.helpText,
+          };
+          break;
+        default:
+          responseObject[field.name] = {
+            type: 'string',
+            value: '',
+            required: field.required,
+            label: field.label,
+            helpText: field.helpText,
+          };
+      }
+    });
+
+    return responseObject;
   }
 
   // Workflow validation
@@ -4200,5 +5752,10 @@ export class WorkflowDesignerPageComponent implements OnInit {
   updateUndoRedoState() {
     this.canUndo = this.historyIndex > 0;
     this.canRedo = this.historyIndex < this.history.length - 1;
+  }
+
+  getTransitionsCount(): number {
+    return this.workflowConnections.filter((conn) => conn.transitionConfig)
+      .length;
   }
 }

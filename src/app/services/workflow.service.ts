@@ -5,10 +5,21 @@ export interface WorkflowNode {
   id: string;
   title: string;
   description: string;
-  type: 'start' | 'form' | 'email' | 'condition' | 'delay' | 'end';
+  type:
+    | 'start'
+    | 'form'
+    | 'email'
+    | 'condition'
+    | 'delay'
+    | 'finish'
+    | 'approval'
+    | 'notification'
+    | 'webhook'
+    | 'database';
   x: number;
   y: number;
   config?: any;
+  isDefault?: boolean;
 }
 
 export interface WorkflowConnection {
@@ -17,6 +28,10 @@ export interface WorkflowConnection {
   to: string;
   fromPort?: string;
   toPort?: string;
+  label?: string;
+  transitionConfig?: any;
+  fromPoint?: { x: number; y: number };
+  toPoint?: { x: number; y: number };
 }
 
 export interface Workflow {
@@ -35,6 +50,20 @@ export interface FormConfig {
   description?: string;
   fields: FormField[];
   steps?: FormStep[];
+  responseObject?: FormResponseObject;
+}
+
+export interface FormResponseObject {
+  [fieldName: string]: {
+    type: 'string' | 'number' | 'boolean' | 'file';
+    value: any;
+    required: boolean;
+    label: string;
+    placeholder?: string;
+    helpText?: string;
+    options?: { value: string; label: string }[];
+    accept?: string;
+  };
 }
 
 export interface FormField {
