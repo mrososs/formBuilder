@@ -27,5 +27,5 @@ import { CommonModule } from '@angular/common';
 })
 export class FormElementsMenuComponent {
   fieldTypesService = inject(FieldTypesService);
-  fieldTypes = this.fieldTypesService.getAllFieldTypes();
+  fieldTypes = this.fieldTypesService.getFieldTypes();
 }

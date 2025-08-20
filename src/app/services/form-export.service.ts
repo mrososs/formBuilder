@@ -1,651 +1,417 @@
 import { Injectable } from '@angular/core';
-import {
-  FormField,
-  FormDefinition,
-  AngularFormExport,
-  ValidationRule,
-} from '../models/field';
+import { FormField, FormDefinition, AngularFormExport } from '../models/field';
+import { ActorsDataService } from './actors-data.service';
 
 @Injectable({
   providedIn: 'root',
 })
 export class FormExportService {
-  constructor() {}
+  constructor(private actorsDataService: ActorsDataService) {}
 
-  exportFormAsJSON(
-    fields: FormField[],
-    formName: string,
-    description?: string
-  ): FormDefinition {
+  exportToJson(form: FormDefinition): string {
+    const exportData = {
+      form: {
+        id: form.id,
+        name: form.name,
+        description: form.description,
+        fields: form.fields.map((field) => this.processFieldForExport(field)),
+        createdAt: form.createdAt,
+        updatedAt: form.updatedAt,
+      },
+      actors: this.actorsDataService.exportActorsData(),
+      exportInfo: {
+        exportedAt: new Date().toISOString(),
+        version: '1.0',
+        includesActors: true,
+      },
+    };
+
+    return JSON.stringify(exportData, null, 2);
+  }
+
+  private processFieldForExport(field: FormField): any {
+    const processedField = { ...field };
+
+    // If field uses actors, include actor information
+    if (field.optionSource === 'actors' && field.actorId) {
+      processedField.actorInfo = {
+        actorId: field.actorId,
+        actorName: this.getActorDisplayName(field.actorId),
+        actorData: this.getActorDataForExport(field.actorId),
+      };
+    }
+
+    return processedField;
+  }
+
+  private getActorDisplayName(actorId: string): string {
+    const actorNames: { [key: string]: string } = {
+      employees: 'Employees',
+      managers: 'Managers',
+      departments: 'Departments',
+      products: 'Products',
+      customers: 'Customers',
+      suppliers: 'Suppliers',
+      locations: 'Locations',
+    };
+    return actorNames[actorId] || actorId;
+  }
+
+  private getActorDataForExport(actorId: string): any {
+    // This would get the actual actor data for export
+    // For now, return a placeholder
     return {
-      id: this.generateId(),
-      name: formName,
-      description: description || '',
-      fields: fields.map((field) => ({ ...field })),
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      actorId: actorId,
+      dataSource: 'company-actors',
+      lastUpdated: new Date().toISOString(),
     };
   }
 
-  exportFormAsAngular(
-    fields: FormField[],
-    formName: string,
-    componentName?: string
-  ): AngularFormExport {
-    const componentNameClean =
-      componentName || this.generateComponentName(formName);
-    const formNameClean = this.generateFormName(formName);
+  exportToAngular(form: FormDefinition): AngularFormExport {
+    const componentName = this.generateComponentName(form.name);
+    const formName = this.generateFormName(form.name);
 
-    return {
-      componentName: componentNameClean,
-      formName: formNameClean,
-      htmlTemplate: this.generateHTMLTemplate(fields, formNameClean),
-      typescriptCode: this.generateTypeScriptCode(
-        fields,
-        formNameClean,
-        componentNameClean
-      ),
-      cssStyles: this.generateCSSStyles(),
-      validators: this.generateValidators(fields),
-    };
-  }
-
-  private generateId(): string {
-    return 'form_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
-  }
-
-  private generateComponentName(formName: string): string {
-    return (
+    const htmlTemplate = this.generateHtmlTemplate(form);
+    const typescriptCode = this.generateTypescriptCode(
+      form,
+      componentName,
       formName
+    );
+    const cssStyles = this.generateCssStyles();
+    const validators = this.generateValidators(form);
+
+    return {
+      componentName,
+      formName,
+      htmlTemplate,
+      typescriptCode,
+      cssStyles,
+      validators,
+    };
+  }
+
+  private generateComponentName(name: string): string {
+    return (
+      name
         .replace(/[^a-zA-Z0-9]/g, '')
         .replace(/^[a-z]/, (letter) => letter.toUpperCase()) + 'FormComponent'
     );
   }
 
-  private generateFormName(formName: string): string {
+  private generateFormName(name: string): string {
     return (
-      formName
+      name
         .replace(/[^a-zA-Z0-9]/g, '')
         .replace(/^[a-z]/, (letter) => letter.toUpperCase()) + 'Form'
     );
   }
 
-  private generateHTMLTemplate(fields: FormField[], formName: string): string {
-    let template = `<div class="max-w-2xl mx-auto p-8 bg-white rounded-lg shadow-lg">
-  <form [formGroup]="${formName}" (ngSubmit)="onSubmit()" class="space-y-6">
-    <div class="text-center mb-8">
-      <h2 class="text-3xl font-bold text-gray-800 mb-2">{{ formTitle }}</h2>
-      <p class="text-gray-600">{{ formDescription }}</p>
-    </div>
+  private generateHtmlTemplate(form: FormDefinition): string {
+    let template = `<div class="form-container">\n`;
+    template += `  <h2>${form.name}</h2>\n`;
+    template += `  <form [formGroup]="${this.generateFormName(
+      form.name
+    )}" (ngSubmit)="onSubmit()">\n`;
 
-    <div class="space-y-6">`;
-
-    fields.forEach((field) => {
-      template += this.generateFieldHTML(field, formName);
+    form.fields.forEach((field) => {
+      template += this.generateFieldHtml(field);
     });
 
-    template += `
-    </div>
-
-    <div class="flex gap-4 justify-end pt-6 border-t border-gray-200">
-      <button type="submit" class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors" [disabled]="${formName}.invalid">
-        Submit
-      </button>
-      <button type="button" class="px-6 py-3 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors" (click)="onReset()">
-        Reset
-      </button>
-    </div>
-  </form>
-</div>`;
+    template += `    <button type="submit" [disabled]="${this.generateFormName(
+      form.name
+    )}.invalid">Submit</button>\n`;
+    template += `  </form>\n`;
+    template += `</div>`;
 
     return template;
   }
 
-  private generateFieldHTML(field: FormField, formName: string): string {
-    const fieldName = this.generateFieldName(field.label);
-    const hasError = `${formName}.get('${fieldName}')?.invalid && ${formName}.get('${fieldName}')?.touched`;
-    const validators = this.generateFieldValidators(field);
-
-    let html = `
-      <div class="space-y-2">
-        <label for="${fieldName}" class="block text-sm font-medium text-gray-700">${
-      field.label
-    }${field.required ? ' <span class="text-red-500">*</span>' : ''}</label>`;
+  private generateFieldHtml(field: FormField): string {
+    let html = '';
 
     switch (field.type) {
       case 'text':
-      case 'email':
-      case 'password':
-      case 'tel':
-      case 'url':
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <input
-            matInput
-            type="${field.inputType || field.type}"
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            placeholder="${field.placeholder || ''}"
-            ${field.required ? 'required' : ''}
-          />`;
-
-        // Only add error messages if validators are configured
-        if (validators !== '[]') {
-          if (field.required) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'minLength')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['minlength']">
-            ${field.label} must be at least {{ ${formName}.get('${fieldName}')?.errors?.['minlength']?.requiredLength }} characters
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'maxLength')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['maxlength']">
-            ${field.label} must be at most {{ ${formName}.get('${fieldName}')?.errors?.['maxlength']?.requiredLength }} characters
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'pattern')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['pattern']">
-            ${field.label} format is invalid
-          </mat-error>`;
-          }
-          if (
-            field.type === 'email' ||
-            field.validations?.some((v) => v.type === 'email')
-          ) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['email']">
-            Please enter a valid email address
-          </mat-error>`;
-          }
-        }
-
-        html += `
-        </mat-form-field>`;
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <input matInput formControlName="${
+          field.id
+        }" placeholder="${field.placeholder || ''}">\n`;
+        html += `    </mat-form-field>\n`;
         break;
-
-      case 'number':
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <input
-            matInput
-            type="number"
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            placeholder="${field.placeholder || ''}"
-            ${field.min ? `min="${field.min}"` : ''}
-            ${field.max ? `max="${field.max}"` : ''}
-            ${field.step ? `step="${field.step}"` : ''}
-            ${field.required ? 'required' : ''}
-          />`;
-
-        // Only add error messages if validators are configured
-        if (validators !== '[]') {
-          if (field.required) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'min')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['min']">
-            ${field.label} must be at least {{ ${formName}.get('${fieldName}')?.errors?.['min']?.min }}
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'max')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['max']">
-            ${field.label} must be at most {{ ${formName}.get('${fieldName}')?.errors?.['max']?.max }}
-          </mat-error>`;
-          }
-        }
-
-        html += `
-        </mat-form-field>`;
-        break;
-
-      case 'textarea':
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <textarea
-            matInput
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            placeholder="${field.placeholder || ''}"
-            rows="${field.rows || 3}"
-            ${field.required ? 'required' : ''}
-          ></textarea>`;
-
-        // Only add error messages if validators are configured
-        if (validators !== '[]') {
-          if (field.required) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'minLength')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['minlength']">
-            ${field.label} must be at least {{ ${formName}.get('${fieldName}')?.errors?.['minlength']?.requiredLength }} characters
-          </mat-error>`;
-          }
-          if (field.validations?.some((v) => v.type === 'maxLength')) {
-            html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['maxlength']">
-            ${field.label} must be at most {{ ${formName}.get('${fieldName}')?.errors?.['maxlength']?.requiredLength }} characters
-          </mat-error>`;
-          }
-        }
-
-        html += `
-        </mat-form-field>`;
-        break;
-
       case 'select':
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <mat-label>${field.label}</mat-label>
-          <mat-select id="${fieldName}" formControlName="${fieldName}" ${
-          field.required ? 'required' : ''
-        }>
-            <mat-option value="">Select ${field.label}</mat-option>`;
-        if (field.options) {
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <mat-select formControlName="${field.id}">\n`;
+        if (field.optionSource === 'actors' && field.actorId) {
+          html += `        <mat-option *ngFor="let option of ${field.actorId}Options" [value]="option.value">\n`;
+          html += `          {{option.label}}\n`;
+          html += `        </mat-option>\n`;
+        } else if (field.options) {
           field.options.forEach((option) => {
-            html += `
-            <mat-option value="${option.value}">${option.label}</mat-option>`;
+            html += `        <mat-option value="${option.value}">${option.label}</mat-option>\n`;
           });
         }
-        html += `
-          </mat-select>`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-        }
-
-        html += `
-        </mat-form-field>`;
+        html += `      </mat-select>\n`;
+        html += `    </mat-form-field>\n`;
         break;
-
-      case 'checkbox':
-        html += `
-        <div class="flex items-center space-x-2">
-          <mat-checkbox
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            ${field.required ? 'required' : ''}
-          >
-            ${field.label}
-          </mat-checkbox>`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <div *ngIf="${formName}.get('${fieldName}')?.errors?.['required'] && ${formName}.get('${fieldName}')?.touched" class="text-red-500 text-sm">
-            ${field.label} is required
-          </div>`;
+      case 'multiselect':
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <mat-select formControlName="${field.id}" multiple>\n`;
+        if (field.optionSource === 'actors' && field.actorId) {
+          html += `        <mat-option *ngFor="let option of ${field.actorId}Options" [value]="option.value">\n`;
+          html += `          {{option.label}}\n`;
+          html += `        </mat-option>\n`;
+        } else if (field.options) {
+          field.options.forEach((option) => {
+            html += `        <mat-option value="${option.value}">${option.label}</mat-option>\n`;
+          });
         }
-
-        html += `
-        </div>`;
+        html += `      </mat-select>\n`;
+        html += `    </mat-form-field>\n`;
         break;
-
       case 'radio':
-        html += `
-        <div class="space-y-2">
-          <label class="block text-sm font-medium text-gray-700">${
-            field.label
-          }</label>
-          <mat-radio-group formControlName="${fieldName}" ${
-          field.required ? 'required' : ''
-        } class="flex flex-col space-y-2">`;
-        if (field.options) {
-          field.options.forEach((option, index) => {
-            html += `
-            <mat-radio-button value="${option.value}">${option.label}</mat-radio-button>`;
+        html += `    <div class="radio-group">\n`;
+        html += `      <label>${field.label}</label>\n`;
+        if (field.optionSource === 'actors' && field.actorId) {
+          html += `      <mat-radio-group formControlName="${field.id}">\n`;
+          html += `        <mat-radio-button *ngFor="let option of ${field.actorId}Options" [value]="option.value">\n`;
+          html += `          {{option.label}}\n`;
+          html += `        </mat-radio-button>\n`;
+          html += `      </mat-radio-group>\n`;
+        } else if (field.options) {
+          html += `      <mat-radio-group formControlName="${field.id}">\n`;
+          field.options.forEach((option) => {
+            html += `        <mat-radio-button value="${option.value}">${option.label}</mat-radio-button>\n`;
           });
+          html += `      </mat-radio-group>\n`;
         }
-        html += `
-          </mat-radio-group>`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <div *ngIf="${formName}.get('${fieldName}')?.errors?.['required'] && ${formName}.get('${fieldName}')?.touched" class="text-red-500 text-sm">
-            ${field.label} is required
-          </div>`;
-        }
-
-        html += `
-        </div>`;
+        html += `    </div>\n`;
         break;
-
-      case 'file':
-        html += `
-        <div class="space-y-2">
-          <input
-            type="file"
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-            ${field.accept ? `accept="${field.accept}"` : ''}
-            ${field.required ? 'required' : ''}
-          />`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <div *ngIf="${formName}.get('${fieldName}')?.errors?.['required'] && ${formName}.get('${fieldName}')?.touched" class="text-red-500 text-sm">
-            ${field.label} is required
-          </div>`;
-        }
-
-        html += `
-        </div>`;
+      case 'checkbox':
+        html += `    <mat-checkbox formControlName="${field.id}">${field.label}</mat-checkbox>\n`;
         break;
-
-      case 'button':
-        html += `
-        <div class="space-y-2">
-          <button
-            type="button"
-            class="px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-            (click)="on${this.generateMethodName(field.label)}()"
-          >
-            ${field.buttonText || field.label}
-          </button>
-        </div>`;
+      case 'textarea':
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <textarea matInput formControlName="${field.id}" rows="${
+          field.rows || 4
+        }" placeholder="${field.placeholder || ''}"></textarea>\n`;
+        html += `    </mat-form-field>\n`;
         break;
-
+      case 'email':
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <input matInput type="email" formControlName="${
+          field.id
+        }" placeholder="${field.placeholder || ''}">\n`;
+        html += `    </mat-form-field>\n`;
+        break;
+      case 'number':
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <input matInput type="number" formControlName="${
+          field.id
+        }" placeholder="${field.placeholder || ''}">\n`;
+        html += `    </mat-form-field>\n`;
+        break;
       case 'date':
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <mat-label>${field.label}</mat-label>
-          <input
-            matInput
-            [matDatepicker]="picker"
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            placeholder="${field.placeholder || 'Choose a date'}"
-            ${field.required ? 'required' : ''}
-          />
-          <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
-          <mat-datepicker #picker></mat-datepicker>`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-        }
-
-        html += `
-        </mat-form-field>`;
+        html += `    <mat-form-field>\n`;
+        html += `      <mat-label>${field.label}</mat-label>\n`;
+        html += `      <input matInput [matDatepicker]="picker" formControlName="${field.id}">\n`;
+        html += `      <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>\n`;
+        html += `      <mat-datepicker #picker></mat-datepicker>\n`;
+        html += `    </mat-form-field>\n`;
         break;
-
-      default:
-        html += `
-        <mat-form-field appearance="outline" class="w-full">
-          <input
-            matInput
-            type="text"
-            id="${fieldName}"
-            formControlName="${fieldName}"
-            placeholder="${field.placeholder || ''}"
-            ${field.required ? 'required' : ''}
-          />`;
-
-        // Only add error message if required is set
-        if (field.required) {
-          html += `
-          <mat-error *ngIf="${formName}.get('${fieldName}')?.errors?.['required']">
-            ${field.label} is required
-          </mat-error>`;
-        }
-
-        html += `
-        </mat-form-field>`;
+      case 'file':
+        html += `    <div class="file-upload">\n`;
+        html += `      <label>${field.label}</label>\n`;
+        html += `      <input type="file" (change)="onFileSelected($event)" accept="${
+          field.accept || '*'
+        }">\n`;
+        html += `    </div>\n`;
+        break;
     }
-
-    html += `
-      </div>`;
 
     return html;
   }
 
-  private generateTypeScriptCode(
-    fields: FormField[],
-    formName: string,
-    componentName: string
+  private generateTypescriptCode(
+    form: FormDefinition,
+    componentName: string,
+    formName: string
   ): string {
-    const formControls = fields
-      .filter((field) => field.type !== 'button') // Exclude buttons from form controls
-      .map((field) => {
-        const fieldName = this.generateFieldName(field.label);
-        const validators = this.generateFieldValidators(field);
-        return `      ${fieldName}: [null, ${validators}]`;
-      })
-      .join(',\n');
+    let code = `import { Component, OnInit } from '@angular/core';\n`;
+    code += `import { FormBuilder, FormGroup, Validators } from '@angular/forms';\n\n`;
+    code += `@Component({\n`;
+    code += `  selector: 'app-${componentName.toLowerCase()}',\n`;
+    code += `  templateUrl: './${componentName.toLowerCase()}.component.html',\n`;
+    code += `  styleUrls: ['./${componentName.toLowerCase()}.component.css']\n`;
+    code += `})\n`;
+    code += `export class ${componentName} implements OnInit {\n`;
+    code += `  ${formName}: FormGroup;\n\n`;
 
-    const fieldProperties = fields
-      .filter((field) => field.type !== 'button') // Exclude buttons from form properties
-      .map((field) => {
-        const fieldName = this.generateFieldName(field.label);
-        return `  ${fieldName} = this.${formName}.get('${fieldName}');`;
-      })
-      .join('\n');
-
-    const methods = fields
-      .filter((field) => field.type === 'button')
-      .map(
-        (field) => `
-  on${this.generateMethodName(field.label)}() {
-    // Handle ${field.label} button click
-    console.log('${field.label} button clicked');
-    this.submitForm();
-  }
-
-  submitForm() {
-    console.log('Form submitted:', this.${formName}.value);
-    // Handle form submission logic here
-  }`
-      )
-      .join('');
-
-    const htmlTemplate = this.generateHTMLTemplate(fields, formName);
-
-    return `import { Component, OnInit } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatInputModule } from '@angular/material/input';
-import { MatSelectModule } from '@angular/material/select';
-import { MatCheckboxModule } from '@angular/material/checkbox';
-import { MatRadioModule } from '@angular/material/radio';
-import { MatDatepickerModule } from '@angular/material/datepicker';
-import { MatNativeDateModule } from '@angular/material/core';
-import { MatButtonModule } from '@angular/material/button';
-import { ReactiveFormsModule } from '@angular/forms';
-import { CommonModule } from '@angular/common';
-
-@Component({
-  selector: 'app-${componentName.toLowerCase().replace('component', '')}',
-  template: \`${htmlTemplate}\`,
-  imports: [
-    CommonModule,
-    ReactiveFormsModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatSelectModule,
-    MatCheckboxModule,
-    MatRadioModule,
-    MatDatepickerModule,
-    MatNativeDateModule,
-    MatButtonModule
-  ],
-  standalone: true
-})
-export class ${componentName} implements OnInit {
-  ${formName}: FormGroup;
-  formTitle = '${formName.replace('Form', '')}';
-  formDescription = 'Please fill out the form below';
-
-${fieldProperties}
-
-  constructor(private fb: FormBuilder) {}
-
-  ngOnInit(): void {
-    this.${formName} = this.fb.group({
-${formControls}
+    // Add actor options properties
+    form.fields.forEach((field) => {
+      if (field.optionSource === 'actors' && field.actorId) {
+        code += `  ${field.actorId}Options: Array<{value: string, label: string}> = [];\n`;
+      }
     });
-  }
 
-  onSubmit() {
-    if (this.${formName}.valid) {
-      console.log('Form submitted:', this.${formName}.value);
-      // Handle form submission
-    } else {
-      this.markFormGroupTouched();
-    }
-  }
+    code += `\n  constructor(private fb: FormBuilder) {}\n\n`;
+    code += `  ngOnInit() {\n`;
+    code += `    this.${formName} = this.fb.group({\n`;
 
-  onReset() {
-    this.${formName}.reset();
-  }
-
-  private markFormGroupTouched() {
-    Object.keys(this.${formName}.controls).forEach(key => {
-      const control = this.${formName}.get(key);
-      control?.markAsTouched();
+    form.fields.forEach((field) => {
+      const validators = this.generateFieldValidators(field);
+      code += `      ${field.id}: ['', ${validators}],\n`;
     });
-  }${methods}
+
+    code += `    });\n\n`;
+
+    // Load actor data
+    form.fields.forEach((field) => {
+      if (field.optionSource === 'actors' && field.actorId) {
+        code += `    this.load${
+          field.actorId.charAt(0).toUpperCase() + field.actorId.slice(1)
+        }Options();\n`;
+      }
+    });
+
+    code += `  }\n\n`;
+
+    // Add methods to load actor data
+    form.fields.forEach((field) => {
+      if (field.optionSource === 'actors' && field.actorId) {
+        code += `  load${
+          field.actorId.charAt(0).toUpperCase() + field.actorId.slice(1)
+        }Options() {\n`;
+        code += `    // Load ${field.actorId} options from service\n`;
+        code += `    // this.${field.actorId}Options = this.actorsService.get${
+          field.actorId.charAt(0).toUpperCase() + field.actorId.slice(1)
+        }Options();\n`;
+        code += `  }\n\n`;
+      }
+    });
+
+    code += `  onSubmit() {\n`;
+    code += `    if (this.${formName}.valid) {\n`;
+    code += `      console.log(this.${formName}.value);\n`;
+    code += `    }\n`;
+    code += `  }\n\n`;
+
+    code += `  onFileSelected(event: any) {\n`;
+    code += `    const file = event.target.files[0];\n`;
+    code += `    console.log('Selected file:', file);\n`;
+    code += `  }\n`;
+    code += `}\n`;
+
+    return code;
+  }
+
+  private generateCssStyles(): string {
+    return `.form-container {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+mat-form-field {
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.radio-group {
+  margin-bottom: 16px;
+}
+
+.radio-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+.file-upload {
+  margin-bottom: 16px;
+}
+
+.file-upload label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+
+button[type="submit"] {
+  margin-top: 16px;
 }`;
+  }
+
+  private generateValidators(form: FormDefinition): string {
+    let validators = '';
+
+    form.fields.forEach((field) => {
+      if (field.required) {
+        validators += `Validators.required`;
+      }
+      if (field.validations) {
+        field.validations.forEach((validation) => {
+          switch (validation.type) {
+            case 'minLength':
+              validators += `, Validators.minLength(${validation.value})`;
+              break;
+            case 'maxLength':
+              validators += `, Validators.maxLength(${validation.value})`;
+              break;
+            case 'pattern':
+              validators += `, Validators.pattern(${validation.value})`;
+              break;
+            case 'email':
+              validators += `, Validators.email`;
+              break;
+          }
+        });
+      }
+    });
+
+    return validators || '[]';
   }
 
   private generateFieldValidators(field: FormField): string {
-    const validators: string[] = [];
+    let validators = '[]';
 
-    // Only add required validator if explicitly set
     if (field.required) {
-      validators.push('Validators.required');
+      validators = '[Validators.required]';
     }
 
-    // Only add validation rules if they are explicitly configured
-    if (field.validations && field.validations.length > 0) {
+    if (field.validations) {
+      const fieldValidators: string[] = [];
+
       field.validations.forEach((validation) => {
         switch (validation.type) {
           case 'minLength':
-            if (validation.value) {
-              validators.push(`Validators.minLength(${validation.value})`);
-            }
+            fieldValidators.push(`Validators.minLength(${validation.value})`);
             break;
           case 'maxLength':
-            if (validation.value) {
-              validators.push(`Validators.maxLength(${validation.value})`);
-            }
+            fieldValidators.push(`Validators.maxLength(${validation.value})`);
             break;
           case 'pattern':
-            if (validation.value) {
-              validators.push(`Validators.pattern(${validation.value})`);
-            }
-            break;
-          case 'min':
-            if (validation.value) {
-              validators.push(`Validators.min(${validation.value})`);
-            }
-            break;
-          case 'max':
-            if (validation.value) {
-              validators.push(`Validators.max(${validation.value})`);
-            }
+            fieldValidators.push(`Validators.pattern(${validation.value})`);
             break;
           case 'email':
-            validators.push('Validators.email');
+            fieldValidators.push('Validators.email');
             break;
         }
       });
+
+      if (fieldValidators.length > 0) {
+        if (field.required) {
+          validators = `[Validators.required, ${fieldValidators.join(', ')}]`;
+        } else {
+          validators = `[${fieldValidators.join(', ')}]`;
+        }
+      }
     }
 
-    // Only add email validator if field type is email AND no other email validation exists
-    if (field.type === 'email' && !validators.includes('Validators.email')) {
-      validators.push('Validators.email');
-    }
-
-    return validators.length > 0 ? validators.join(', ') : '[]';
-  }
-
-  private generateValidators(fields: FormField[]): string {
-    const customValidators = fields
-      .filter((field) => field.customValidation)
-      .map((field) => {
-        const fieldName = this.generateFieldName(field.label);
-        return `
-// Custom validator for ${fieldName}
-${fieldName}Validator(): ValidatorFn {
-  return (control: AbstractControl): ValidationErrors | null => {
-    ${field.customValidation}
-  };
-}`;
-      })
-      .join('');
-
-    return customValidators;
-  }
-
-  private generateCSSStyles(): string {
-    return `/* Tailwind CSS classes are used in the template */`;
-  }
-
-  private generateFieldName(label: string): string {
-    return label
-      .toLowerCase()
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .replace(/^[0-9]/, '_$&');
-  }
-
-  private generateMethodName(label: string): string {
-    return label
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .replace(/^[a-z]/, (letter) => letter.toUpperCase());
-  }
-
-  downloadJSON(formDefinition: FormDefinition): void {
-    const dataStr = JSON.stringify(formDefinition, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${formDefinition.name.replace(/[^a-zA-Z0-9]/g, '_')}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  downloadAngularFiles(exportData: AngularFormExport): void {
-    // Download single inline component file
-    this.downloadFile(
-      `${exportData.componentName}.component.ts`,
-      exportData.typescriptCode
-    );
-  }
-
-  private downloadFile(filename: string, content: string): void {
-    const dataBlob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(url);
+    return validators;
   }
 }

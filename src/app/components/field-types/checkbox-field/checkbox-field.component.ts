@@ -4,7 +4,7 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 
 @Component({
   selector: 'app-checkbox-field',
-  imports: [MatCheckboxModule, ],
+  imports: [MatCheckboxModule],
   template: `
     <mat-checkbox [required]="field().required">
       {{ field().label }}

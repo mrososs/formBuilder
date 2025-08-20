@@ -11,7 +11,11 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatIconModule } from '@angular/material/icon';
-import { FormField } from '../../models/field';
+import {
+  FormField,
+  FormDefinition,
+  AngularFormExport,
+} from '../../models/field';
 import { FormExportService } from '../../services/form-export.service';
 
 @Component({
@@ -563,22 +567,29 @@ export class FormExportComponent {
     if (!this.canExport()) return;
 
     try {
+      // Create FormDefinition object
+      const formDefinition: FormDefinition = {
+        id: this.generateFormId(),
+        name: this.formName,
+        description: this.formDescription,
+        fields: this.fields,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
       if (this.exportJSON) {
-        const formDefinition = this.formExportService.exportFormAsJSON(
-          this.fields,
-          this.formName,
-          this.formDescription
+        const jsonData = this.formExportService.exportToJson(formDefinition);
+        this.downloadFile(
+          jsonData,
+          `${this.formName.replace(/[^a-zA-Z0-9]/g, '_')}.json`,
+          'application/json'
         );
-        this.formExportService.downloadJSON(formDefinition);
       }
 
       if (this.exportAngular) {
-        const exportData = this.formExportService.exportFormAsAngular(
-          this.fields,
-          this.formName,
-          this.componentName
-        );
-        this.formExportService.downloadAngularFiles(exportData);
+        const exportData =
+          this.formExportService.exportToAngular(formDefinition);
+        this.downloadAngularFiles(exportData);
       }
 
       this.close();
@@ -586,6 +597,49 @@ export class FormExportComponent {
       console.error('Export failed:', error);
       // You could add a toast notification here
     }
+  }
+
+  private generateFormId(): string {
+    return 'form_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  private downloadFile(
+    content: string,
+    filename: string,
+    contentType: string
+  ): void {
+    const blob = new Blob([content], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }
+
+  private downloadAngularFiles(exportData: AngularFormExport): void {
+    // Download HTML file
+    this.downloadFile(
+      exportData.htmlTemplate,
+      `${exportData.componentName.toLowerCase()}.component.html`,
+      'text/html'
+    );
+
+    // Download TypeScript file
+    this.downloadFile(
+      exportData.typescriptCode,
+      `${exportData.componentName.toLowerCase()}.component.ts`,
+      'text/plain'
+    );
+
+    // Download CSS file
+    this.downloadFile(
+      exportData.cssStyles,
+      `${exportData.componentName.toLowerCase()}.component.css`,
+      'text/css'
+    );
   }
 
   close(): void {

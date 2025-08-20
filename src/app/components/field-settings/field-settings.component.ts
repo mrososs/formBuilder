@@ -1,6 +1,7 @@
 import { Component, computed, inject } from '@angular/core';
 import { FormService } from '../../services/form.service';
 import { FieldTypesService } from '../../services/field-types.service';
+import { ActorsDataService } from '../../services/actors-data.service';
 import { MatFormField } from '@angular/material/form-field';
 import { MatInput } from '@angular/material/input';
 import { MatSelect } from '@angular/material/select';
@@ -40,8 +41,10 @@ import { CommonModule } from '@angular/common';
           <mat-label>{{ setting.label }}</mat-label>
           <input
             matInput
-            [ngModel]="findValues()[setting.key]"
-            (ngModelChange)="updateField(selectField.id, setting.key, $event)"
+            [ngModel]="getNestedValue(selectField, setting.key)"
+            (ngModelChange)="
+              updateNestedField(selectField.id, setting.key, $event)
+            "
             [placeholder]="getPlaceholder(setting.key)"
           />
         </mat-form-field>
@@ -51,15 +54,19 @@ import { CommonModule } from '@angular/common';
           <input
             matInput
             type="number"
-            [ngModel]="findValues()[setting.key]"
-            (ngModelChange)="updateField(selectField.id, setting.key, $event)"
+            [ngModel]="getNestedValue(selectField, setting.key)"
+            (ngModelChange)="
+              updateNestedField(selectField.id, setting.key, $event)
+            "
           />
         </mat-form-field>
         } @case('checkbox'){
         <div class="flex items-center">
           <mat-checkbox
-            [checked]="findValues()[setting.key]"
-            (change)="updateField(selectField.id, setting.key, $event.checked)"
+            [checked]="getNestedValue(selectField, setting.key)"
+            (change)="
+              updateNestedField(selectField.id, setting.key, $event.checked)
+            "
             class="mr-2"
           >
           </mat-checkbox>
@@ -69,8 +76,10 @@ import { CommonModule } from '@angular/common';
         <mat-form-field appearance="outline" class="w-full">
           <mat-label>{{ setting.label }}</mat-label>
           <mat-select
-            [ngModel]="findValues()[setting.key]"
-            (ngModelChange)="updateField(selectField.id, setting.key, $event)"
+            [ngModel]="getNestedValue(selectField, setting.key)"
+            (ngModelChange)="
+              updateNestedField(selectField.id, setting.key, $event)
+            "
           >
             @for (option of setting.options; track option.value) {
             <mat-option [value]="option.value">{{ option.label }}</mat-option>
@@ -234,6 +243,7 @@ import { CommonModule } from '@angular/common';
 export class FieldSettingsComponent {
   formService = inject(FormService);
   fieldTypesService = inject(FieldTypesService);
+  actorsDataService = inject(ActorsDataService);
 
   validationExpanded = false;
 
@@ -256,6 +266,37 @@ export class FieldSettingsComponent {
 
   updateField(fieldId: string, key: string, value: any) {
     this.formService.updateField(fieldId, key, value);
+  }
+
+  updateNestedField(fieldId: string, key: string, value: any) {
+    if (key.includes('.')) {
+      // Handle nested properties like apiConfig.url
+      const keys = key.split('.');
+      const field = this.formService.selectField();
+      if (!field) return;
+
+      let current = field as any;
+      for (let i = 0; i < keys.length - 1; i++) {
+        if (!current[keys[i]]) {
+          current[keys[i]] = {};
+        }
+        current = current[keys[i]];
+      }
+      current[keys[keys.length - 1]] = value;
+
+      // Update the entire field to trigger change detection
+      this.formService.updateField(
+        fieldId,
+        keys[0],
+        field[keys[0] as keyof typeof field]
+      );
+    } else {
+      this.updateField(fieldId, key, value);
+    }
+  }
+
+  getNestedValue(obj: any, path: string): any {
+    return path.split('.').reduce((current, key) => current?.[key], obj);
   }
 
   toggleValidationExpanded() {
@@ -323,19 +364,42 @@ export class FieldSettingsComponent {
   }
 
   shouldShowSetting(setting: any, field: any): boolean {
+    const optionSource = field.optionSource || 'static';
+
     // Show Static Options setting only when optionSource is 'static'
     if (setting.key === 'staticOptions') {
-      return field.optionSource === 'static';
+      return optionSource === 'static';
     }
 
-    // Show API Group setting only when optionSource is 'api'
-    if (setting.key === 'apiGroupId') {
-      return field.optionSource === 'api';
+    // Show Actor setting only when optionSource is 'actors'
+    if (setting.key === 'actorId') {
+      return optionSource === 'actors';
     }
 
     // Show Custom Options setting only when optionSource is 'custom'
     if (setting.key === 'customOptions') {
-      return field.optionSource === 'custom';
+      return optionSource === 'custom';
+    }
+
+    // Show External API settings only when optionSource is 'external'
+    if (setting.key.startsWith('apiConfig.')) {
+      return optionSource === 'external';
+    }
+
+    // Show multi-select settings only for relevant field types
+    if (setting.key === 'allowMultiple') {
+      return field.type === 'radio';
+    }
+
+    if (setting.key === 'maxSelections') {
+      return (
+        field.type === 'multiselect' ||
+        (field.type === 'radio' && field.allowMultiple)
+      );
+    }
+
+    if (setting.key === 'minSelections') {
+      return field.type === 'radio' && field.allowMultiple;
     }
 
     // Show all other settings
@@ -348,6 +412,14 @@ export class FieldSettingsComponent {
         return 'Option 1, Option 2, Option 3';
       case 'customOptions':
         return '[{"value": "option1", "label": "Option 1"}, {"value": "option2", "label": "Option 2"}]';
+      case 'apiConfig.url':
+        return 'https://api.example.com/data';
+      case 'apiConfig.dataPath':
+        return 'data.items or leave empty for root array';
+      case 'apiConfig.valueField':
+        return 'id or value';
+      case 'apiConfig.labelField':
+        return 'name or label';
       default:
         return '';
     }

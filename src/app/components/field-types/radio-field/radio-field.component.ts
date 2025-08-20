@@ -1,23 +1,114 @@
-import { Component, input } from '@angular/core';
+import {
+  Component,
+  input,
+  inject,
+  signal,
+  computed,
+  effect,
+} from '@angular/core';
 import { MatRadioModule } from '@angular/material/radio';
+import { MatCheckboxModule } from '@angular/material/checkbox';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatIconModule } from '@angular/material/icon';
+import { MatChipsModule } from '@angular/material/chips';
 import { FormField } from '../../../models/field';
 import { CommonModule } from '@angular/common';
+import { ApiDataService, ApiOption } from '../../../services/api-data.service';
+import { ActorsDataService } from '../../../services/actors-data.service';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-radio-field',
-  imports: [MatRadioModule, CommonModule],
+  imports: [
+    MatRadioModule,
+    MatCheckboxModule,
+    MatProgressSpinnerModule,
+    MatIconModule,
+    MatChipsModule,
+    CommonModule,
+    FormsModule,
+  ],
   template: `
     <div class="radio-field-container">
-      <label class="radio-label">{{ field().label }}</label>
-      <mat-radio-group [required]="field().required">
-        <mat-radio-button
-          *ngFor="let option of field().options || defaultOptions"
+      <label class="radio-label">
+        {{ field().label }}
+        @if (field().required) {
+        <span class="required-indicator">*</span>
+        }
+      </label>
+
+      @if (isLoading()) {
+      <div class="loading-container">
+        <mat-spinner diameter="20"></mat-spinner>
+        <span>Loading options...</span>
+      </div>
+      } @else if (hasError()) {
+      <div class="error-container">
+        <mat-icon>error</mat-icon>
+        <span>{{ errorMessage() }}</span>
+      </div>
+      } @else if (currentOptions().length === 0) {
+      <div class="no-options-container">
+        <mat-icon>info</mat-icon>
+        <span>No options available</span>
+      </div>
+      } @else { @if (field().allowMultiple) {
+      <!-- Multi-select mode using checkboxes -->
+      <div class="checkbox-group">
+        @for (option of currentOptions(); track option.value) {
+        <mat-checkbox
           [value]="option.value"
-          class="radio-option"
+          [checked]="isOptionSelected(option.value)"
+          (change)="onCheckboxChange(option.value, $event.checked)"
+          class="checkbox-option"
         >
           {{ option.label }}
+        </mat-checkbox>
+        }
+      </div>
+
+      @if (selectedValues().length > 0) {
+      <div class="selected-values">
+        <label>Selected:</label>
+        <mat-chip-set>
+          @for (value of selectedValues(); track value) {
+          <mat-chip
+            [value]="value"
+            (removed)="removeSelection(value)"
+            removable
+          >
+            {{ getOptionLabel(value) }}
+            <mat-icon matChipRemove>cancel</mat-icon>
+          </mat-chip>
+          }
+        </mat-chip-set>
+      </div>
+      } @if (field().maxSelections && selectedValues().length >=
+      field().maxSelections!) {
+      <div class="max-selections-warning">
+        <mat-icon>warning</mat-icon>
+        <span>Maximum {{ field().maxSelections }} selections allowed</span>
+      </div>
+      } } @else {
+      <!-- Single-select mode using radio buttons -->
+      <mat-radio-group [required]="field().required" class="radio-group">
+        @for (option of currentOptions(); track option.value) {
+        <mat-radio-button [value]="option.value" class="radio-option">
+          {{ option.label }}
         </mat-radio-button>
+        }
       </mat-radio-group>
+      } } @if (field().optionSource === 'actors' && field().actorId) {
+      <div class="api-info">
+        <mat-icon>link</mat-icon>
+        <span>Loading from: {{ getActorName(field().actorId!) }}</span>
+      </div>
+      } @if (field().optionSource === 'external' && field().apiConfig?.url) {
+      <div class="api-info">
+        <mat-icon>link</mat-icon>
+        <span>Loading from: {{ field().apiConfig?.url }}</span>
+      </div>
+      }
     </div>
   `,
   styles: `
@@ -35,18 +126,249 @@ import { CommonModule } from '@angular/common';
       color: rgba(0, 0, 0, 0.87);
     }
     
+    .required-indicator {
+      color: #f44336;
+      margin-left: 4px;
+    }
+    
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
     .radio-option {
       display: block;
       margin-bottom: 8px;
+    }
+    
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    
+    .checkbox-option {
+      display: block;
+      margin-bottom: 8px;
+    }
+    
+    .loading-container,
+    .error-container,
+    .no-options-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 4px;
+    }
+    
+    .loading-container {
+      background-color: #e3f2fd;
+      color: #1976d2;
+    }
+    
+    .error-container {
+      background-color: #ffebee;
+      color: #f44336;
+    }
+    
+    .no-options-container {
+      background-color: #fff3e0;
+      color: #ff9800;
+    }
+    
+    .selected-values {
+      margin-top: 12px;
+      padding: 8px;
+      background-color: #f5f5f5;
+      border-radius: 4px;
+    }
+    
+    .selected-values label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      color: rgba(0, 0, 0, 0.87);
+    }
+    
+    .max-selections-warning {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 8px;
+      background-color: #fff3e0;
+      color: #ff9800;
+      border-radius: 4px;
+    }
+    
+    .api-info {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    
+    mat-chip-set {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
     }
   `,
 })
 export class RadioFieldComponent {
   field = input.required<FormField>();
+  private apiDataService = inject(ApiDataService);
+  private actorsDataService = inject(ActorsDataService);
+
+  isLoading = signal(false);
+  hasError = signal(false);
+  errorMessage = signal('');
+  apiOptions = signal<ApiOption[]>([]);
+  actorOptions = signal<Array<{ value: string; label: string }>>([]);
+  selectedValues = signal<string[]>([]);
 
   defaultOptions = [
     { value: 'option1', label: 'Option 1' },
     { value: 'option2', label: 'Option 2' },
     { value: 'option3', label: 'Option 3' },
   ];
+
+  currentOptions = computed(() => {
+    const field = this.field();
+    const optionSource = field.optionSource || 'static';
+
+    switch (optionSource) {
+      case 'actors':
+        return this.actorOptions();
+      case 'external':
+        return this.apiOptions();
+      case 'custom':
+        return this.parseCustomOptions(field.customOptions || '');
+      case 'static':
+      default:
+        return (
+          this.parseStaticOptions(field.staticOptions || '') ||
+          field.options ||
+          this.defaultOptions
+        );
+    }
+  });
+
+  constructor() {
+    // Set up effect to watch for changes in field properties
+    effect(() => {
+      const field = this.field();
+      this.loadOptions();
+    });
+  }
+
+  private loadOptions() {
+    const field = this.field();
+    const optionSource = field.optionSource || 'static';
+
+    if (optionSource === 'actors' && field.actorId) {
+      this.isLoading.set(true);
+      this.hasError.set(false);
+      this.errorMessage.set('');
+
+      this.actorsDataService.getActorOptions(field.actorId).subscribe({
+        next: (options) => {
+          this.actorOptions.set(options);
+          this.isLoading.set(false);
+        },
+        error: (error) => {
+          console.error('Error loading actor options:', error);
+          this.hasError.set(true);
+          this.errorMessage.set(error.message || 'Failed to load options');
+          this.isLoading.set(false);
+        },
+      });
+    } else if (optionSource === 'external' && field.apiConfig?.url) {
+      this.isLoading.set(true);
+      this.hasError.set(false);
+      this.errorMessage.set('');
+
+      this.apiDataService.getOptionsByGroup('', field.apiConfig).subscribe({
+        next: (options) => {
+          this.apiOptions.set(options);
+          this.isLoading.set(false);
+        },
+        error: (error) => {
+          console.error('Error loading API options:', error);
+          this.hasError.set(true);
+          this.errorMessage.set(error.message || 'Failed to load options');
+          this.isLoading.set(false);
+        },
+      });
+    } else {
+      // Clear options when not using API or actors
+      this.apiOptions.set([]);
+      this.actorOptions.set([]);
+      this.hasError.set(false);
+      this.errorMessage.set('');
+    }
+  }
+
+  getActorName(actorId: string): string {
+    // This would typically come from the actors service
+    const actorNames: { [key: string]: string } = {
+      employees: 'Employees',
+      managers: 'Managers',
+      departments: 'Departments',
+      products: 'Products',
+      customers: 'Customers',
+      suppliers: 'Suppliers',
+      locations: 'Locations',
+    };
+    return actorNames[actorId] || actorId;
+  }
+
+  // Multi-select methods
+  isOptionSelected(value: string): boolean {
+    return this.selectedValues().includes(value);
+  }
+
+  onCheckboxChange(value: string, checked: boolean) {
+    const currentSelected = [...this.selectedValues()];
+
+    if (checked) {
+      // Check if we can add more selections
+      if (
+        this.field().maxSelections &&
+        currentSelected.length >= this.field().maxSelections!
+      ) {
+        return; // Cannot add more selections
+      }
+      currentSelected.push(value);
+    } else {
+      const index = currentSelected.indexOf(value);
+      if (index > -1) {
+        currentSelected.splice(index, 1);
+      }
+    }
+
+    this.selectedValues.set(currentSelected);
+  }
+
+  removeSelection(value: string) {
+    const currentSelected = this.selectedValues().filter((v) => v !== value);
+    this.selectedValues.set(currentSelected);
+  }
+
+  getOptionLabel(value: string): string {
+    const option = this.currentOptions().find((opt) => opt.value === value);
+    return option ? option.label : value;
+  }
+
+  private parseCustomOptions(customOptionsJson: string): ApiOption[] {
+    return this.apiDataService.parseCustomOptions(customOptionsJson);
+  }
+
+  private parseStaticOptions(staticOptionsText: string): ApiOption[] {
+    return this.apiDataService.parseStaticOptions(staticOptionsText);
+  }
 }
